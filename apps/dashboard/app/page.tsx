@@ -1,6 +1,53 @@
+import Link from "next/link";
 import { apiGet } from "./api";
 
-export default async function OverviewPage() {
+type OverviewMode = "last" | "today" | "month";
+
+type MatrixCell = {
+  id: string;
+  providerId: string;
+  countryId: string;
+  provider: { name: string; code: string; enabled: boolean; integrationStatus: string };
+  country: { name: string; iso3: string; enabled: boolean };
+  configEnabled: boolean;
+  liveEnabled: boolean;
+  effectiveEnabled: boolean;
+  disabledReasons: string[];
+  lastRunAt: string | null;
+  lastRunSuccess: boolean | null;
+  lastRunRecords: number | null;
+  observationsToday: number;
+  observationsThisMonth: number;
+};
+
+function modeValue(cell: MatrixCell, mode: OverviewMode): string {
+  if (mode === "last") return cell.lastRunRecords == null ? "-" : String(cell.lastRunRecords);
+  if (mode === "today") return String(cell.observationsToday);
+  return String(cell.observationsThisMonth);
+}
+
+function cellStatus(cell: MatrixCell): { label: string; className: string; title: string } {
+  if (!cell.effectiveEnabled) {
+    return {
+      label: "OFF",
+      className: "matrix-status is-off",
+      title: cell.disabledReasons.length > 0 ? `Disabled: ${cell.disabledReasons.join(", ")}` : "Disabled"
+    };
+  }
+  if (cell.lastRunSuccess === false) {
+    return { label: "ERR", className: "matrix-status is-error", title: "Last fetch failed" };
+  }
+  if (cell.lastRunRecords === 0) {
+    return { label: "NO DATA", className: "matrix-status is-empty", title: "Active, but last run stored no records" };
+  }
+  if (cell.lastRunRecords == null) {
+    return { label: "WAIT", className: "matrix-status is-empty", title: "No fetch run yet" };
+  }
+  return { label: "ON", className: "matrix-status is-on", title: "Active" };
+}
+
+export default async function OverviewPage({ searchParams }: { searchParams?: { mode?: string } }) {
+  const mode: OverviewMode = searchParams?.mode === "today" || searchParams?.mode === "month" ? searchParams.mode : "last";
   const data = await apiGet<{
     today: number;
     thisWeek: number;
@@ -9,16 +56,25 @@ export default async function OverviewPage() {
     activeProviders: number;
     failedLast24h: number;
     openCritical: number;
-    providerCountryRows: Array<{
-      id: string;
-      provider: { name: string };
-      country?: { name: string } | null;
-      lastFetchAt: string;
-      lastRecordCount: number;
-      observationsToday: number;
-      observationsThisMonth: number;
-    }>;
-  }>("/overview", { today: 0, thisWeek: 0, thisMonth: 0, activeCountries: 0, activeProviders: 0, failedLast24h: 0, openCritical: 0, providerCountryRows: [] });
+    countries: Array<{ id: string; name: string; iso3: string; enabled: boolean }>;
+    matrixRows: MatrixCell[];
+  }>("/overview", {
+    today: 0,
+    thisWeek: 0,
+    thisMonth: 0,
+    activeCountries: 0,
+    activeProviders: 0,
+    failedLast24h: 0,
+    openCritical: 0,
+    countries: [],
+    matrixRows: []
+  });
+
+  const providers = Array.from(
+    new Map(data.matrixRows.map((cell) => [cell.providerId, { id: cell.providerId, ...cell.provider }])).values()
+  ).sort((left, right) => left.name.localeCompare(right.name));
+  const countries = data.countries;
+  const byProviderCountry = new Map(data.matrixRows.map((cell) => [`${cell.providerId}:${cell.countryId}`, cell]));
 
   return (
     <>
@@ -30,30 +86,43 @@ export default async function OverviewPage() {
         <div className="card metric">Failed fetches 24h<strong>{data.failedLast24h}</strong></div>
         <div className="card metric">Open critical alerts<strong>{data.openCritical}</strong></div>
       </section>
-      <h2>Provider-country activity</h2>
-      <div className="overview-matrix">
-        <div className="overview-total muted-cell"></div>
-        <div className="overview-total muted-cell"></div>
-        <div className="overview-total muted-cell"></div>
-        <div className="overview-total muted-cell"></div>
-        <div className="overview-total metric">Total today<strong>{data.today}</strong></div>
-        <div className="overview-total metric">Total this month<strong>{data.thisMonth}</strong></div>
-        <div className="overview-head">Provider</div>
-        <div className="overview-head">Country</div>
-        <div className="overview-head">Last fetch</div>
-        <div className="overview-head">Last observations</div>
-        <div className="overview-head">Today</div>
-        <div className="overview-head">This month</div>
-        {data.providerCountryRows.map((row) => (
-          <div className="overview-row" key={row.id}>
-            <div>{row.provider.name}</div>
-            <div>{row.country?.name ?? "n/a"}</div>
-            <div>{row.lastFetchAt}</div>
-            <div>{row.lastRecordCount}</div>
-            <div>{row.observationsToday}</div>
-            <div>{row.observationsThisMonth}</div>
-          </div>
-        ))}
+      <div className="section-heading">
+        <h2>Provider-country matrix</h2>
+        <div className="segmented-control">
+          <Link className={mode === "last" ? "active" : ""} href="/?mode=last">Last run</Link>
+          <Link className={mode === "today" ? "active" : ""} href="/?mode=today">Today</Link>
+          <Link className={mode === "month" ? "active" : ""} href="/?mode=month">This month</Link>
+        </div>
+      </div>
+      <div className="matrix-scroll">
+        <table className="matrix-table">
+          <thead>
+            <tr>
+              <th>Provider</th>
+              {countries.map((country) => (
+                <th key={country.id} title={country.enabled ? "Country enabled" : "Country disabled"}>{country.iso3}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {providers.map((provider) => (
+              <tr key={provider.id}>
+                <th>{provider.name}</th>
+                {countries.map((country) => {
+                  const cell = byProviderCountry.get(`${provider.id}:${country.id}`);
+                  if (!cell) return <td key={country.id} className="matrix-cell is-missing"><span className="matrix-status is-off">N/A</span><strong>-</strong></td>;
+                  const status = cellStatus(cell);
+                  return (
+                    <td key={country.id} className="matrix-cell" title={status.title}>
+                      <span className={status.className}>{status.label}</span>
+                      <strong>{modeValue(cell, mode)}</strong>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </>
   );

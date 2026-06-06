@@ -47,44 +47,72 @@ app.get("/overview", async () => {
     prisma.providerFetchRun.count({ where: { success: false, startedAt: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) } } }),
     prisma.alertEvent.count({ where: { status: "OPEN", severity: "CRITICAL" } })
   ]);
-  const lastFetches = await prisma.providerFetchRun.findMany({
-    where: { success: true },
-    orderBy: { finishedAt: "desc" },
-    take: 100,
-    include: { provider: true, country: true }
-  });
-  const seen = new Set<string>();
-  const latestByProviderCountry = lastFetches.filter((run: (typeof lastFetches)[number]) => {
-    const key = `${run.providerId}:${run.countryId ?? "none"}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).slice(0, 20);
+  const [countries, configs] = await Promise.all([
+    prisma.country.findMany({ orderBy: { name: "asc" } }),
+    prisma.providerCountryConfig.findMany({
+      where: {
+        provider: {
+          code: { not: "MOCK" },
+          integrationStatus: { in: ["IMPLEMENTED", "TESTING", "WORKING"] }
+        }
+      },
+      include: { provider: true, country: true },
+      orderBy: [{ provider: { name: "asc" } }, { country: { name: "asc" } }]
+    })
+  ]);
 
-  const providerCountryRows = await Promise.all(
-    latestByProviderCountry.map(async (run: (typeof latestByProviderCountry)[number]) => {
-      const countryWhere = run.countryId ? { countryTags: { some: { countryId: run.countryId } } } : {};
+  const matrixRows = await Promise.all(
+    configs.map(async (config: (typeof configs)[number]) => {
+      const lastRun = await prisma.providerFetchRun.findFirst({
+        where: { providerId: config.providerId, countryId: config.countryId },
+        orderBy: { startedAt: "desc" }
+      });
+      const countryWhere = { countryTags: { some: { countryId: config.countryId } } };
       const [observationsToday, observationsThisMonth] = await Promise.all([
         prisma.rawFlightObservation.count({
-          where: { providerId: run.providerId, observedAt: { gte: day }, ...countryWhere }
+          where: { providerId: config.providerId, observedAt: { gte: day }, ...countryWhere }
         }),
         prisma.rawFlightObservation.count({
-          where: { providerId: run.providerId, observedAt: { gte: month }, ...countryWhere }
+          where: { providerId: config.providerId, observedAt: { gte: month }, ...countryWhere }
         })
       ]);
+      const effectiveEnabled = config.provider.enabled && config.country.enabled && config.enabled && config.liveEnabled;
+      const disabledReasons = [
+        config.provider.enabled ? null : "provider",
+        config.country.enabled ? null : "country",
+        config.enabled ? null : "config",
+        config.liveEnabled ? null : "live"
+      ].filter((reason): reason is string => Boolean(reason));
+
       return {
-        id: run.id,
-        provider: run.provider,
-        country: run.country,
-        lastFetchAt: run.finishedAt ?? run.startedAt,
-        lastRecordCount: run.recordCount ?? 0,
+        id: config.id,
+        providerId: config.providerId,
+        countryId: config.countryId,
+        provider: {
+          name: config.provider.name,
+          code: config.provider.code,
+          enabled: config.provider.enabled,
+          integrationStatus: config.provider.integrationStatus
+        },
+        country: {
+          name: config.country.name,
+          iso3: config.country.iso3,
+          enabled: config.country.enabled
+        },
+        configEnabled: config.enabled,
+        liveEnabled: config.liveEnabled,
+        effectiveEnabled,
+        disabledReasons,
+        lastRunAt: lastRun?.finishedAt ?? lastRun?.startedAt ?? null,
+        lastRunSuccess: lastRun?.success ?? null,
+        lastRunRecords: lastRun?.recordCount ?? null,
         observationsToday,
         observationsThisMonth
       };
     })
   );
 
-  return { today, thisWeek, thisMonth, activeCountries, activeProviders, failedLast24h, openCritical, providerCountryRows };
+  return { today, thisWeek, thisMonth, activeCountries, activeProviders, failedLast24h, openCritical, countries, matrixRows };
 });
 
 app.get("/countries", async () => prisma.country.findMany({ include: { collectionAreas: true }, orderBy: { name: "asc" } }));

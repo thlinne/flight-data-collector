@@ -27,6 +27,14 @@ enum ProviderCoverageAreaType {
   POLYGON
 }
 
+enum ProviderIntegrationStatus {
+  PLANNED
+  IMPLEMENTED
+  TESTING
+  WORKING
+  DISABLED
+}
+
 enum GeometryQuality {
   APPROXIMATE_BBOX
   OFFICIAL_POLYGON
@@ -84,6 +92,7 @@ model Provider {
   code                     String                  @unique
   name                     String
   enabled                  Boolean                 @default(true)
+  integrationStatus        ProviderIntegrationStatus @default(PLANNED)
   supportsLive             Boolean                 @default(true)
   supportsHistorical       Boolean                 @default(false)
   baseUrl                  String?
