@@ -21,7 +21,8 @@ const providers = [
   { code: "PLANE_FINDER", name: "Plane Finder", supportsLive: true, supportsHistorical: true, baseUrl: null },
   { code: "AIRNAV_RADARBOX", name: "AirNav RadarBox", supportsLive: true, supportsHistorical: true, baseUrl: null },
   { code: "FLIGHTAWARE", name: "FlightAware AeroAPI", supportsLive: true, supportsHistorical: true, baseUrl: "https://aeroapi.flightaware.com" },
-  { code: "RAPID_FLIGHT_RADAR", name: "RapidAPI Flight Radar", supportsLive: true, supportsHistorical: false, baseUrl: "https://flight-radar1.p.rapidapi.com" }
+  { code: "RAPID_FLIGHT_RADAR", name: "RapidAPI Flight Radar", supportsLive: true, supportsHistorical: false, baseUrl: "https://flight-radar1.p.rapidapi.com" },
+  { code: "RAPID_ADSBEXCHANGE", name: "RapidAPI ADSBexchange", supportsLive: true, supportsHistorical: false, baseUrl: "https://adsbexchange-com1.p.rapidapi.com" }
 ];
 
 async function main(): Promise<void> {
