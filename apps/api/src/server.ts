@@ -69,13 +69,41 @@ app.get("/overview", async () => {
         orderBy: { startedAt: "desc" }
       });
       const countryWhere = { countryTags: { some: { countryId: config.countryId } } };
-      const [observationsToday, observationsThisMonth] = await Promise.all([
+      const [observationsToday, observationsThisMonth, flightsToday, flightsThisMonth, lastRunFlights] = await Promise.all([
         prisma.rawFlightObservation.count({
           where: { providerId: config.providerId, observedAt: { gte: day }, ...countryWhere }
         }),
         prisma.rawFlightObservation.count({
           where: { providerId: config.providerId, observedAt: { gte: month }, ...countryWhere }
-        })
+        }),
+        prisma.providerDetectedFlightCountry.count({
+          where: {
+            countryId: config.countryId,
+            lastObservedAt: { gte: day },
+            detectedFlight: { providerId: config.providerId }
+          }
+        }),
+        prisma.providerDetectedFlightCountry.count({
+          where: {
+            countryId: config.countryId,
+            lastObservedAt: { gte: month },
+            detectedFlight: { providerId: config.providerId }
+          }
+        }),
+        lastRun
+          ? prisma.rawFlightObservation
+              .findMany({
+                where: {
+                  providerId: config.providerId,
+                  fetchRunId: lastRun.id,
+                  detectedFlightId: { not: null },
+                  ...countryWhere
+                },
+                select: { detectedFlightId: true },
+                distinct: ["detectedFlightId"]
+              })
+              .then((rows: Array<{ detectedFlightId: string | null }>) => rows.length)
+          : Promise.resolve(null)
       ]);
       const effectiveEnabled = config.provider.enabled && config.country.enabled && config.enabled && config.liveEnabled;
       const disabledReasons = [
@@ -107,8 +135,11 @@ app.get("/overview", async () => {
         lastRunAt: lastRun?.finishedAt ?? lastRun?.startedAt ?? null,
         lastRunSuccess: lastRun?.success ?? null,
         lastRunRecords: lastRun?.recordCount ?? null,
+        lastRunFlights,
         observationsToday,
-        observationsThisMonth
+        observationsThisMonth,
+        flightsToday,
+        flightsThisMonth
       };
     })
   );

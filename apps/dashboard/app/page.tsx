@@ -16,14 +16,23 @@ type MatrixCell = {
   lastRunAt: string | null;
   lastRunSuccess: boolean | null;
   lastRunRecords: number | null;
+  lastRunFlights: number | null;
   observationsToday: number;
   observationsThisMonth: number;
+  flightsToday: number;
+  flightsThisMonth: number;
 };
 
 function modeValue(cell: MatrixCell, mode: OverviewMode): string {
   if (mode === "last") return cell.lastRunRecords == null ? "-" : String(cell.lastRunRecords);
   if (mode === "today") return String(cell.observationsToday);
   return String(cell.observationsThisMonth);
+}
+
+function flightModeValue(cell: MatrixCell, mode: OverviewMode): string {
+  if (mode === "last") return cell.lastRunFlights == null ? "-" : String(cell.lastRunFlights);
+  if (mode === "today") return String(cell.flightsToday);
+  return String(cell.flightsThisMonth);
 }
 
 function cellStatus(cell: MatrixCell): { label: string; className: string; title: string } {
@@ -87,7 +96,7 @@ export default async function OverviewPage({ searchParams }: { searchParams?: { 
         <div className="card metric">Open critical alerts<strong>{data.openCritical}</strong></div>
       </section>
       <div className="section-heading">
-        <h2>Provider-country matrix</h2>
+        <h2>Data point matrix</h2>
         <div className="segmented-control">
           <Link className={mode === "last" ? "active" : ""} href="/?mode=last">Last run</Link>
           <Link className={mode === "today" ? "active" : ""} href="/?mode=today">Today</Link>
@@ -116,6 +125,39 @@ export default async function OverviewPage({ searchParams }: { searchParams?: { 
                     <td key={country.id} className="matrix-cell" title={status.title}>
                       <span className={status.className}>{status.label}</span>
                       <strong>{modeValue(cell, mode)}</strong>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="section-heading">
+        <h2>Flight matrix</h2>
+      </div>
+      <div className="matrix-scroll">
+        <table className="matrix-table">
+          <thead>
+            <tr>
+              <th>Provider</th>
+              {countries.map((country) => (
+                <th key={country.id} title={country.enabled ? "Country enabled" : "Country disabled"}>{country.iso3}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {providers.map((provider) => (
+              <tr key={provider.id}>
+                <th>{provider.name}</th>
+                {countries.map((country) => {
+                  const cell = byProviderCountry.get(`${provider.id}:${country.id}`);
+                  if (!cell) return <td key={country.id} className="matrix-cell is-missing"><span className="matrix-status is-off">N/A</span><strong>-</strong></td>;
+                  const status = cellStatus(cell);
+                  return (
+                    <td key={country.id} className="matrix-cell" title={status.title}>
+                      <span className={status.className}>{status.label}</span>
+                      <strong>{flightModeValue(cell, mode)}</strong>
                     </td>
                   );
                 })}

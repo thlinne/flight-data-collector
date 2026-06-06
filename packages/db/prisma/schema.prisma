@@ -101,6 +101,12 @@ enum ReferenceDataSyncStatus {
   FAILED
 }
 
+enum DetectedFlightGroupingMethod {
+  PROVIDER_FLIGHT_ID
+  ICAO24_CALLSIGN
+  ICAO24
+}
+
 model Provider {
   id                       String                  @id @default(cuid())
   code                     String                  @unique
@@ -117,6 +123,7 @@ model Provider {
   fetchRuns                ProviderFetchRun[]
   rawResponses             RawProviderResponse[]
   rawObservations          RawFlightObservation[]
+  detectedFlights          ProviderDetectedFlight[]
   observedAircraftIdentities ObservedAircraftIdentity[]
   providerDailyMetrics     ProviderDailyMetric[]
   providerCoverageAreas     ProviderCoverageArea[]
@@ -140,6 +147,7 @@ model Country {
   providerCoverageAreas     ProviderCoverageArea[]
   fetchRuns                ProviderFetchRun[]
   countryObservationTags   CountryObservationTag[]
+  detectedFlightCountries  ProviderDetectedFlightCountry[]
   providerDailyMetrics     ProviderDailyMetric[]
   countryDailyMetrics      CountryDailyMetric[]
   alertRules               AlertRule[]
@@ -258,6 +266,7 @@ model RawProviderResponse {
   payloadJson     Json
   payloadHash     String
   byteSize        Int?
+  flightProcessedAt DateTime?
   provider        Provider               @relation(fields: [providerId], references: [id])
   fetchRun        ProviderFetchRun       @relation(fields: [fetchRunId], references: [id])
   observations    RawFlightObservation[]
@@ -268,6 +277,7 @@ model RawFlightObservation {
   providerId             String
   fetchRunId             String
   rawResponseId          String
+  detectedFlightId       String?
   observedAt             DateTime
   providerAircraftId     String?
   providerFlightId       String?
@@ -294,12 +304,58 @@ model RawFlightObservation {
   provider               Provider                @relation(fields: [providerId], references: [id])
   fetchRun               ProviderFetchRun        @relation(fields: [fetchRunId], references: [id])
   rawResponse            RawProviderResponse     @relation(fields: [rawResponseId], references: [id])
+  detectedFlight         ProviderDetectedFlight? @relation(fields: [detectedFlightId], references: [id])
   flightObservationLinks FlightObservationLink[]
   countryTags            CountryObservationTag[]
 
   @@index([providerId, observedAt])
   @@index([icao24])
   @@index([callsign])
+  @@index([detectedFlightId])
+}
+
+model ProviderDetectedFlight {
+  id                     String                         @id @default(cuid())
+  providerId             String
+  groupingMethod         DetectedFlightGroupingMethod
+  groupingKey            String
+  flightKey              String
+  providerFlightId       String?
+  icao24                 String?
+  callsign               String?
+  registration           String?
+  aircraftTypeIcao       String?
+  operatorName           String?
+  firstObservedAt        DateTime
+  lastObservedAt         DateTime
+  observationCount       Int                            @default(0)
+  createdAt              DateTime                       @default(now())
+  updatedAt              DateTime                       @updatedAt
+  provider               Provider                       @relation(fields: [providerId], references: [id])
+  observations           RawFlightObservation[]
+  countries              ProviderDetectedFlightCountry[]
+
+  @@unique([providerId, flightKey])
+  @@index([providerId, groupingKey])
+  @@index([providerId, firstObservedAt])
+  @@index([providerId, lastObservedAt])
+  @@index([icao24])
+  @@index([callsign])
+}
+
+model ProviderDetectedFlightCountry {
+  id                String                 @id @default(cuid())
+  detectedFlightId  String
+  countryId         String
+  firstObservedAt   DateTime
+  lastObservedAt    DateTime
+  observationCount  Int                    @default(0)
+  detectedFlight    ProviderDetectedFlight @relation(fields: [detectedFlightId], references: [id])
+  country           Country                @relation(fields: [countryId], references: [id])
+
+  @@unique([detectedFlightId, countryId])
+  @@index([countryId, firstObservedAt])
+  @@index([countryId, lastObservedAt])
 }
 
 model OurAirportsAirport {

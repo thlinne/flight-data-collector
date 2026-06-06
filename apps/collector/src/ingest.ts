@@ -5,6 +5,12 @@ import { prisma } from "@flight-data-collector/db";
 import type { TransactionClient } from "@flight-data-collector/db";
 
 type JsonInput = string | number | boolean | JsonInput[] | { [key: string]: JsonInput };
+type FlightGrouping = {
+  method: "PROVIDER_FLIGHT_ID" | "ICAO24_CALLSIGN" | "ICAO24";
+  key: string;
+};
+
+const flightContinuationGapMs = 3 * 60 * 60 * 1000;
 
 function hashPayload(payload: unknown): string {
   return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
@@ -63,6 +69,98 @@ async function storeObservedIdentity(tx: TransactionClient, providerId: string, 
   });
 }
 
+function normalizeFlightPart(value: string | null | undefined): string {
+  return (value ?? "").trim().toUpperCase();
+}
+
+function flightGrouping(record: ProviderFetchResult["records"][number]): FlightGrouping | null {
+  const providerFlightId = normalizeFlightPart(record.providerFlightId);
+  if (providerFlightId) return { method: "PROVIDER_FLIGHT_ID", key: `providerFlightId:${providerFlightId}` };
+
+  const icao24 = normalizeFlightPart(record.icao24);
+  const callsign = normalizeFlightPart(record.callsign);
+  if (icao24 && callsign) return { method: "ICAO24_CALLSIGN", key: `icao24-callsign:${icao24}:${callsign}` };
+  if (icao24) return { method: "ICAO24", key: `icao24:${icao24}` };
+  return null;
+}
+
+async function findOrCreateDetectedFlight(tx: TransactionClient, providerId: string, record: ProviderFetchResult["records"][number]): Promise<string | null> {
+  const grouping = flightGrouping(record);
+  if (!grouping) return null;
+
+  const latest = await tx.providerDetectedFlight.findFirst({
+    where: { providerId, groupingKey: grouping.key },
+    orderBy: { lastObservedAt: "desc" }
+  });
+  const shouldContinue =
+    latest != null &&
+    (grouping.method === "PROVIDER_FLIGHT_ID" || record.observedAt.getTime() - latest.lastObservedAt.getTime() <= flightContinuationGapMs);
+
+  if (latest && shouldContinue) {
+    await tx.providerDetectedFlight.update({
+      where: { id: latest.id },
+      data: {
+        providerFlightId: record.providerFlightId ?? latest.providerFlightId,
+        icao24: record.icao24 ?? latest.icao24,
+        callsign: record.callsign ?? latest.callsign,
+        registration: record.registration ?? latest.registration,
+        aircraftTypeIcao: record.aircraftTypeIcao ?? latest.aircraftTypeIcao,
+        operatorName: record.operatorName ?? latest.operatorName,
+        firstObservedAt: record.observedAt < latest.firstObservedAt ? record.observedAt : latest.firstObservedAt,
+        lastObservedAt: record.observedAt > latest.lastObservedAt ? record.observedAt : latest.lastObservedAt,
+        observationCount: { increment: 1 }
+      }
+    });
+    return latest.id;
+  }
+
+  const created = await tx.providerDetectedFlight.create({
+    data: {
+      providerId,
+      groupingMethod: grouping.method,
+      groupingKey: grouping.key,
+      flightKey: `${grouping.key}:${record.observedAt.toISOString()}`,
+      providerFlightId: record.providerFlightId,
+      icao24: record.icao24,
+      callsign: record.callsign,
+      registration: record.registration,
+      aircraftTypeIcao: record.aircraftTypeIcao,
+      operatorName: record.operatorName,
+      firstObservedAt: record.observedAt,
+      lastObservedAt: record.observedAt,
+      observationCount: 1
+    }
+  });
+  return created.id;
+}
+
+async function tagDetectedFlightCountry(tx: TransactionClient, detectedFlightId: string | null, countryId: string, observedAt: Date): Promise<void> {
+  if (!detectedFlightId) return;
+  const existing = await tx.providerDetectedFlightCountry.findUnique({
+    where: { detectedFlightId_countryId: { detectedFlightId, countryId } }
+  });
+  if (existing) {
+    await tx.providerDetectedFlightCountry.update({
+      where: { id: existing.id },
+      data: {
+        firstObservedAt: observedAt < existing.firstObservedAt ? observedAt : existing.firstObservedAt,
+        lastObservedAt: observedAt > existing.lastObservedAt ? observedAt : existing.lastObservedAt,
+        observationCount: { increment: 1 }
+      }
+    });
+    return;
+  }
+  await tx.providerDetectedFlightCountry.create({
+    data: {
+      detectedFlightId,
+      countryId,
+      firstObservedAt: observedAt,
+      lastObservedAt: observedAt,
+      observationCount: 1
+    }
+  });
+}
+
 export async function storeFetchResult(input: {
   providerId: string;
   countryId: string;
@@ -107,11 +205,13 @@ export async function storeFetchResult(input: {
     const area = await tx.collectionArea.findUniqueOrThrow({ where: { id: input.collectionAreaId } });
     for (const record of input.result.records) {
       await storeObservedIdentity(tx, input.providerId, record);
+      const detectedFlightId = await findOrCreateDetectedFlight(tx, input.providerId, record);
       const observation = await tx.rawFlightObservation.create({
         data: {
           providerId: input.providerId,
           fetchRunId: fetchRun.id,
           rawResponseId: rawResponse.id,
+          detectedFlightId,
           observedAt: record.observedAt,
           providerAircraftId: record.providerAircraftId,
           providerFlightId: record.providerFlightId,
@@ -159,9 +259,11 @@ export async function storeFetchResult(input: {
             confidenceScore: 0.75
           }
         });
+        await tagDetectedFlightCountry(tx, detectedFlightId, input.countryId, record.observedAt);
       }
     }
 
+    await tx.rawProviderResponse.update({ where: { id: rawResponse.id }, data: { flightProcessedAt: new Date() } });
     return { fetchRun, rawResponse };
   });
 }
