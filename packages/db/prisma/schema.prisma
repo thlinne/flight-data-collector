@@ -105,6 +105,7 @@ enum DetectedFlightGroupingMethod {
   PROVIDER_FLIGHT_ID
   ICAO24_CALLSIGN
   ICAO24
+  CALLSIGN
 }
 
 model Provider {

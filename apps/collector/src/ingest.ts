@@ -15,7 +15,7 @@ type FlightRecord = {
   operatorName?: string | null;
 };
 type FlightGrouping = {
-  method: "PROVIDER_FLIGHT_ID" | "ICAO24_CALLSIGN" | "ICAO24";
+  method: "PROVIDER_FLIGHT_ID" | "ICAO24_CALLSIGN" | "ICAO24" | "CALLSIGN";
   key: string;
 };
 
@@ -90,6 +90,7 @@ function flightGrouping(record: FlightRecord): FlightGrouping | null {
   const callsign = normalizeFlightPart(record.callsign);
   if (icao24 && callsign) return { method: "ICAO24_CALLSIGN", key: `icao24-callsign:${icao24}:${callsign}` };
   if (icao24) return { method: "ICAO24", key: `icao24:${icao24}` };
+  if (callsign) return { method: "CALLSIGN", key: `callsign:${callsign}` };
   return null;
 }
 
