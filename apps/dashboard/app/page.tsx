@@ -35,7 +35,18 @@ function flightModeValue(cell: MatrixCell, mode: OverviewMode): string {
   return String(cell.flightsThisMonth);
 }
 
-function cellStatus(cell: MatrixCell): { label: string; className: string; title: string } {
+function numericModeValue(cell: MatrixCell, mode: OverviewMode, kind: "observations" | "flights"): number | null {
+  if (kind === "flights") {
+    if (mode === "last") return cell.lastRunFlights;
+    if (mode === "today") return cell.flightsToday;
+    return cell.flightsThisMonth;
+  }
+  if (mode === "last") return cell.lastRunRecords;
+  if (mode === "today") return cell.observationsToday;
+  return cell.observationsThisMonth;
+}
+
+function cellStatus(cell: MatrixCell, mode: OverviewMode, kind: "observations" | "flights"): { label: string; className: string; title: string } {
   if (!cell.effectiveEnabled) {
     return {
       label: "OFF",
@@ -46,11 +57,13 @@ function cellStatus(cell: MatrixCell): { label: string; className: string; title
   if (cell.lastRunSuccess === false) {
     return { label: "ERR", className: "matrix-status is-error", title: "Last fetch failed" };
   }
-  if (cell.lastRunRecords === 0) {
-    return { label: "NO DATA", className: "matrix-status is-empty", title: "Active, but last run stored no records" };
-  }
-  if (cell.lastRunRecords == null) {
+  const value = numericModeValue(cell, mode, kind);
+  if (value == null) {
     return { label: "WAIT", className: "matrix-status is-empty", title: "No fetch run yet" };
+  }
+  if (value === 0) {
+    const period = mode === "last" ? "last run" : mode === "today" ? "today" : "this month";
+    return { label: "NO DATA", className: "matrix-status is-empty", title: `Active, but no ${kind === "flights" ? "flights" : "records"} for ${period}` };
   }
   return { label: "ON", className: "matrix-status is-on", title: "Active" };
 }
@@ -120,7 +133,7 @@ export default async function OverviewPage({ searchParams }: { searchParams?: { 
                 {countries.map((country) => {
                   const cell = byProviderCountry.get(`${provider.id}:${country.id}`);
                   if (!cell) return <td key={country.id} className="matrix-cell is-missing"><span className="matrix-status is-off">N/A</span><strong>-</strong></td>;
-                  const status = cellStatus(cell);
+                  const status = cellStatus(cell, mode, "observations");
                   return (
                     <td key={country.id} className="matrix-cell" title={status.title}>
                       <span className={status.className}>{status.label}</span>
@@ -153,7 +166,7 @@ export default async function OverviewPage({ searchParams }: { searchParams?: { 
                 {countries.map((country) => {
                   const cell = byProviderCountry.get(`${provider.id}:${country.id}`);
                   if (!cell) return <td key={country.id} className="matrix-cell is-missing"><span className="matrix-status is-off">N/A</span><strong>-</strong></td>;
-                  const status = cellStatus(cell);
+                  const status = cellStatus(cell, mode, "flights");
                   return (
                     <td key={country.id} className="matrix-cell" title={status.title}>
                       <span className={status.className}>{status.label}</span>
