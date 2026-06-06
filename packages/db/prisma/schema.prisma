@@ -21,6 +21,12 @@ enum CollectionAreaType {
   FIR
 }
 
+enum ProviderCoverageAreaType {
+  RADIUS
+  BBOX
+  POLYGON
+}
+
 enum GeometryQuality {
   APPROXIMATE_BBOX
   OFFICIAL_POLYGON
@@ -89,6 +95,7 @@ model Provider {
   rawResponses             RawProviderResponse[]
   rawObservations          RawFlightObservation[]
   providerDailyMetrics     ProviderDailyMetric[]
+  providerCoverageAreas     ProviderCoverageArea[]
   alertRules               AlertRule[]
   alertEvents              AlertEvent[]
 }
@@ -106,6 +113,7 @@ model Country {
   updatedAt                DateTime                @updatedAt
   collectionAreas          CollectionArea[]
   providerCountryConfigs   ProviderCountryConfig[]
+  providerCoverageAreas     ProviderCoverageArea[]
   fetchRuns                ProviderFetchRun[]
   countryObservationTags   CountryObservationTag[]
   providerDailyMetrics     ProviderDailyMetric[]
@@ -132,6 +140,32 @@ model CollectionArea {
   country                Country                 @relation(fields: [countryId], references: [id])
   fetchRuns              ProviderFetchRun[]
   countryObservationTags CountryObservationTag[]
+}
+
+model ProviderCoverageArea {
+  id          String                   @id @default(cuid())
+  providerId  String
+  countryId   String
+  type        ProviderCoverageAreaType @default(RADIUS)
+  name        String
+  enabled     Boolean                  @default(true)
+  latitude    Float?
+  longitude   Float?
+  radiusNm    Int?
+  bboxNorth   Float?
+  bboxSouth   Float?
+  bboxEast    Float?
+  bboxWest    Float?
+  geoJson     Json?
+  priority    Priority                 @default(NORMAL)
+  notes       String?
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+  provider    Provider                 @relation(fields: [providerId], references: [id])
+  country     Country                  @relation(fields: [countryId], references: [id])
+
+  @@unique([providerId, countryId, name])
+  @@index([providerId, countryId, enabled])
 }
 
 model ProviderCountryConfig {

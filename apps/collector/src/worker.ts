@@ -56,9 +56,15 @@ async function runFetch(data: { providerId: string; countryId: string; providerC
     prisma.provider.findUniqueOrThrow({ where: { id: data.providerId } }),
     prisma.country.findUniqueOrThrow({ where: { id: data.countryId }, include: { collectionAreas: { where: { enabled: true }, take: 1 } } })
   ]);
-  const config = await prisma.providerCountryConfig.findUnique({
-    where: { providerId_countryId: { providerId: provider.id, countryId: country.id } }
-  });
+  const [config, providerCoverageAreas] = await Promise.all([
+    prisma.providerCountryConfig.findUnique({
+      where: { providerId_countryId: { providerId: provider.id, countryId: country.id } }
+    }),
+    prisma.providerCoverageArea.findMany({
+      where: { providerId: provider.id, countryId: country.id, enabled: true },
+      orderBy: [{ priority: "desc" }, { name: "asc" }]
+    })
+  ]);
   const area = country.collectionAreas[0];
   const adapter = adapters.get(data.providerCode ?? provider.code);
   if (!area || !adapter || area.bboxNorth == null || area.bboxSouth == null || area.bboxEast == null || area.bboxWest == null) {
@@ -75,26 +81,48 @@ async function runFetch(data: { providerId: string; countryId: string; providerC
     return;
   }
 
-  try {
+  const livePoints =
+    providerCoverageAreas.length > 0
+      ? providerCoverageAreas
+          .filter((coverageArea) => coverageArea.type === "RADIUS" && coverageArea.latitude != null && coverageArea.longitude != null && coverageArea.radiusNm != null)
+          .map((coverageArea) => ({
+            name: coverageArea.name,
+            livePoint: {
+              latitude: coverageArea.latitude as number,
+              longitude: coverageArea.longitude as number,
+              radiusNm: coverageArea.radiusNm as number
+            }
+          }))
+      : [
+          {
+            name: "provider-country-default",
+            livePoint:
+              config?.liveLatitude != null && config.liveLongitude != null && config.liveRadiusNm != null
+                ? { latitude: config.liveLatitude, longitude: config.liveLongitude, radiusNm: config.liveRadiusNm }
+                : undefined
+          }
+        ];
+
+  for (const coverage of livePoints) {
+    const pointStartedAt = new Date();
+    try {
     const result = await adapter.fetchLivePositions({
       bbox: { north: area.bboxNorth, south: area.bboxSouth, east: area.bboxEast, west: area.bboxWest },
-      livePoint:
-        config?.liveLatitude != null && config.liveLongitude != null && config.liveRadiusNm != null
-          ? { latitude: config.liveLatitude, longitude: config.liveLongitude, radiusNm: config.liveRadiusNm }
-          : undefined
+      livePoint: coverage.livePoint
     });
-    await storeFetchResult({ providerId: provider.id, countryId: country.id, collectionAreaId: area.id, mode, startedAt, result });
-  } catch (error) {
-    await storeFailedFetchRun({
-      providerId: provider.id,
-      countryId: country.id,
-      collectionAreaId: area.id,
-      mode,
-      endpoint: `${provider.code}:live`,
-      requestParamsJson: { countryId: country.id },
-      startedAt,
-      error
-    });
+      await storeFetchResult({ providerId: provider.id, countryId: country.id, collectionAreaId: area.id, mode, startedAt: pointStartedAt, result });
+    } catch (error) {
+      await storeFailedFetchRun({
+        providerId: provider.id,
+        countryId: country.id,
+        collectionAreaId: area.id,
+        mode,
+        endpoint: `${provider.code}:live:${coverage.name}`,
+        requestParamsJson: { countryId: country.id, coverageName: coverage.name, livePoint: coverage.livePoint },
+        startedAt: pointStartedAt,
+        error
+      });
+    }
   }
 }
 

@@ -25,6 +25,17 @@ const providers = [
   { code: "RAPID_ADSBEXCHANGE", name: "RapidAPI ADSBexchange", supportsLive: true, supportsHistorical: false, baseUrl: "https://adsbexchange-com1.p.rapidapi.com" }
 ];
 
+const adsbExchangeCoverageAreas = [
+  { iso3: "LBY", name: "Libya Tripoli west/northwest", latitude: 32.8872, longitude: 13.1913, radiusNm: 250, priority: "CRITICAL" as const },
+  { iso3: "LBY", name: "Libya Benghazi northeast", latitude: 32.1167, longitude: 20.0667, radiusNm: 250, priority: "CRITICAL" as const },
+  { iso3: "LBY", name: "Libya Sabha central/south", latitude: 27.0377, longitude: 14.4283, radiusNm: 250, priority: "HIGH" as const },
+  { iso3: "LBY", name: "Libya Kufra southeast", latitude: 24.1786, longitude: 23.313, radiusNm: 250, priority: "HIGH" as const },
+  { iso3: "LBY", name: "Libya Ghat southwest", latitude: 25.1456, longitude: 10.1426, radiusNm: 250, priority: "HIGH" as const },
+  { iso3: "BDI", name: "Burundi Bujumbura west", latitude: -3.324, longitude: 29.318, radiusNm: 120, priority: "CRITICAL" as const },
+  { iso3: "BDI", name: "Burundi Gitega center", latitude: -3.427, longitude: 29.924, radiusNm: 120, priority: "CRITICAL" as const },
+  { iso3: "BDI", name: "Burundi Ngozi north", latitude: -2.91, longitude: 29.83, radiusNm: 90, priority: "HIGH" as const }
+];
+
 async function main(): Promise<void> {
   for (const country of countries) {
     const created = await prisma.country.upsert({
@@ -123,6 +134,42 @@ async function main(): Promise<void> {
         notes: "ADSBexchange test point: Tripoli area, radius 50 NM."
       }
     });
+  }
+
+  if (adsbExchange) {
+    for (const coverageArea of adsbExchangeCoverageAreas) {
+      const country = await prisma.country.findUnique({ where: { iso3: coverageArea.iso3 } });
+      if (!country) continue;
+      await prisma.providerCoverageArea.upsert({
+        where: {
+          providerId_countryId_name: {
+            providerId: adsbExchange.id,
+            countryId: country.id,
+            name: coverageArea.name
+          }
+        },
+        update: {
+          enabled: true,
+          latitude: coverageArea.latitude,
+          longitude: coverageArea.longitude,
+          radiusNm: coverageArea.radiusNm,
+          priority: coverageArea.priority,
+          notes: "Initial coarse ANSP-airspace coverage candidate for ADSBexchange evaluation."
+        },
+        create: {
+          providerId: adsbExchange.id,
+          countryId: country.id,
+          type: "RADIUS",
+          name: coverageArea.name,
+          enabled: true,
+          latitude: coverageArea.latitude,
+          longitude: coverageArea.longitude,
+          radiusNm: coverageArea.radiusNm,
+          priority: coverageArea.priority,
+          notes: "Initial coarse ANSP-airspace coverage candidate for ADSBexchange evaluation."
+        }
+      });
+    }
   }
 
   await prisma.alertRule.upsert({
