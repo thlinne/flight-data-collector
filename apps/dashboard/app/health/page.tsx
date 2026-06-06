@@ -1,9 +1,15 @@
 import { revalidatePath } from "next/cache";
-import { apiGet, apiPatch } from "../api";
+import { apiGet, apiPatch, apiPost } from "../api";
 
 async function reviewFailedRuns() {
   "use server";
   await apiPatch("/system-health/failed-runs/review", {});
+  revalidatePath("/health");
+}
+
+async function rebuildDetectedFlights() {
+  "use server";
+  await apiPost("/system-health/rebuild-detected-flights", {});
   revalidatePath("/health");
 }
 
@@ -21,6 +27,10 @@ export default async function HealthPage() {
       <div className="toolbar">
         <a className="button" href="/health/database-backup.sql">Download database backup</a>
       </div>
+      <h2>Flight aggregation</h2>
+      <form className="toolbar" action={rebuildDetectedFlights}>
+        <button className="button secondary">Rebuild flight aggregation</button>
+      </form>
       <h2>Collector heartbeat</h2>
       <table className="table">
         <thead><tr><th>Service</th><th>Status</th><th>Last seen</th><th>Started</th><th>Version</th></tr></thead>

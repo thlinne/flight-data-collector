@@ -423,6 +423,11 @@ app.patch("/system-health/failed-runs/review", async (_request, reply) => {
   return reply.send({ reviewed: result.count });
 });
 
+app.post("/system-health/rebuild-detected-flights", async () => {
+  const job = await collectionQueue.add("rebuild-detected-flights", {}, { attempts: 1 });
+  return { queued: true, jobId: job.id };
+});
+
 app.get("/admin/database-backup.sql", async (_request, reply) => {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {

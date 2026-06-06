@@ -5,6 +5,15 @@ import { prisma } from "@flight-data-collector/db";
 import type { TransactionClient } from "@flight-data-collector/db";
 
 type JsonInput = string | number | boolean | JsonInput[] | { [key: string]: JsonInput };
+type FlightRecord = {
+  observedAt: Date;
+  providerFlightId?: string | null;
+  icao24?: string | null;
+  callsign?: string | null;
+  registration?: string | null;
+  aircraftTypeIcao?: string | null;
+  operatorName?: string | null;
+};
 type FlightGrouping = {
   method: "PROVIDER_FLIGHT_ID" | "ICAO24_CALLSIGN" | "ICAO24";
   key: string;
@@ -73,7 +82,7 @@ function normalizeFlightPart(value: string | null | undefined): string {
   return (value ?? "").trim().toUpperCase();
 }
 
-function flightGrouping(record: ProviderFetchResult["records"][number]): FlightGrouping | null {
+function flightGrouping(record: FlightRecord): FlightGrouping | null {
   const providerFlightId = normalizeFlightPart(record.providerFlightId);
   if (providerFlightId) return { method: "PROVIDER_FLIGHT_ID", key: `providerFlightId:${providerFlightId}` };
 
@@ -84,7 +93,7 @@ function flightGrouping(record: ProviderFetchResult["records"][number]): FlightG
   return null;
 }
 
-async function findOrCreateDetectedFlight(tx: TransactionClient, providerId: string, record: ProviderFetchResult["records"][number]): Promise<string | null> {
+async function findOrCreateDetectedFlight(tx: TransactionClient, providerId: string, record: FlightRecord): Promise<string | null> {
   const grouping = flightGrouping(record);
   if (!grouping) return null;
 
@@ -159,6 +168,47 @@ async function tagDetectedFlightCountry(tx: TransactionClient, detectedFlightId:
       observationCount: 1
     }
   });
+}
+
+export async function rebuildDetectedFlights(): Promise<{ observationsProcessed: number; flightsCreated: number; flightCountriesCreated: number }> {
+  await prisma.$transaction(async (tx: TransactionClient) => {
+    await tx.rawFlightObservation.updateMany({ data: { detectedFlightId: null } });
+    await tx.providerDetectedFlightCountry.deleteMany();
+    await tx.providerDetectedFlight.deleteMany();
+    await tx.rawProviderResponse.updateMany({ data: { flightProcessedAt: null } });
+  });
+
+  const observations = await prisma.rawFlightObservation.findMany({
+    orderBy: [{ providerId: "asc" }, { observedAt: "asc" }, { id: "asc" }],
+    include: { countryTags: true }
+  });
+
+  for (const observation of observations) {
+    await prisma.$transaction(async (tx: TransactionClient) => {
+      const detectedFlightId = await findOrCreateDetectedFlight(tx, observation.providerId, {
+        observedAt: observation.observedAt,
+        providerFlightId: observation.providerFlightId,
+        icao24: observation.icao24,
+        callsign: observation.callsign,
+        registration: observation.registration,
+        aircraftTypeIcao: observation.aircraftTypeIcao,
+        operatorName: observation.operatorName
+      });
+      if (detectedFlightId) {
+        await tx.rawFlightObservation.update({ where: { id: observation.id }, data: { detectedFlightId } });
+        for (const tag of observation.countryTags) {
+          await tagDetectedFlightCountry(tx, detectedFlightId, tag.countryId, observation.observedAt);
+        }
+      }
+    });
+  }
+
+  await prisma.rawProviderResponse.updateMany({ data: { flightProcessedAt: new Date() } });
+  const [flightsCreated, flightCountriesCreated] = await Promise.all([
+    prisma.providerDetectedFlight.count(),
+    prisma.providerDetectedFlightCountry.count()
+  ]);
+  return { observationsProcessed: observations.length, flightsCreated, flightCountriesCreated };
 }
 
 export async function storeFetchResult(input: {

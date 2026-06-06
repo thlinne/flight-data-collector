@@ -4,7 +4,7 @@ import pino from "pino";
 import { prisma } from "@flight-data-collector/db";
 import { createProviderAdapters } from "@flight-data-collector/providers";
 import { evaluateAlerts } from "./alerts.js";
-import { storeFailedFetchRun, storeFetchResult } from "./ingest.js";
+import { rebuildDetectedFlights, storeFailedFetchRun, storeFetchResult } from "./ingest.js";
 import { enqueueDueReferenceDataSyncs, syncReferenceData } from "./reference-data.js";
 
 const logger = pino({ name: "collector" });
@@ -141,6 +141,11 @@ new Worker(
         throw new Error(`Unsupported reference data source: ${source ?? "missing"}`);
       }
       await syncReferenceData(source as "OURAIRPORTS" | "OPENSKY_AIRCRAFT" | "OPENFLIGHTS" | "WIKIDATA");
+      return;
+    }
+    if (job.name === "rebuild-detected-flights") {
+      const result = await rebuildDetectedFlights();
+      logger.info(result, "rebuilt detected flights");
       return;
     }
     if (job.name === "manual-test-fetch") {
