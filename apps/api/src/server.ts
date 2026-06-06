@@ -344,29 +344,57 @@ app.get("/admin/database-backup.sql", async (_request, reply) => {
     return reply.code(500).send({ error: "DATABASE_URL is not configured" });
   }
 
+  const parsedUrl = new URL(databaseUrl);
+  const databaseName = parsedUrl.pathname.replace(/^\//, "");
+  const schema = parsedUrl.searchParams.get("schema");
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const filename = `flight_data_collector_${timestamp}.sql`;
-  const dump = spawn("pg_dump", ["--no-owner", "--no-privileges", databaseUrl], {
+  const args = [
+    "--no-owner",
+    "--no-privileges",
+    "-h",
+    parsedUrl.hostname,
+    "-p",
+    parsedUrl.port || "5432",
+    "-U",
+    decodeURIComponent(parsedUrl.username),
+    "-d",
+    databaseName
+  ];
+  if (schema) {
+    args.push("-n", schema);
+  }
+
+  const dump = spawn("pg_dump", args, {
+    env: {
+      ...process.env,
+      PGPASSWORD: decodeURIComponent(parsedUrl.password)
+    },
     stdio: ["ignore", "pipe", "pipe"]
   });
 
+  const chunks: Buffer[] = [];
   const errors: Buffer[] = [];
+  dump.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
   dump.stderr.on("data", (chunk: Buffer) => errors.push(chunk));
-  dump.on("error", (error) => {
-    if (!reply.sent) {
-      void reply.code(500).send({ error: error.message });
-    }
+
+  const exitCode = await new Promise<number | null>((resolve, reject) => {
+    dump.on("error", reject);
+    dump.on("close", resolve);
   });
-  dump.on("close", (code) => {
-    if (code && !reply.sent) {
-      void reply.code(500).send({ error: Buffer.concat(errors).toString("utf8") || `pg_dump exited with code ${code}` });
-    }
-  });
+
+  const sql = Buffer.concat(chunks);
+  if (exitCode !== 0 || sql.length === 0) {
+    const errorText = Buffer.concat(errors).toString("utf8").trim();
+    return reply.code(500).send({
+      error: errorText || `pg_dump exited with code ${exitCode ?? "unknown"} and produced an empty backup`
+    });
+  }
 
   return reply
     .header("Content-Type", "application/sql; charset=utf-8")
     .header("Content-Disposition", `attachment; filename="${filename}"`)
-    .send(dump.stdout);
+    .send(sql);
 });
 
 app.post("/manual-test-fetch", async (request) => {
