@@ -86,6 +86,7 @@ services:
       - ../.env
     environment:
       NEXT_PUBLIC_API_BASE_URL: http://api:4000
+      APP_ENVIRONMENT: ${APP_ENVIRONMENT:-DEV}
     ports:
       - "3000:3000"
     depends_on:

@@ -1,6 +1,7 @@
 import "./globals.css";
 import type { ReactNode } from "react";
 import { Activity, Bell, BookOpen, Database, Gauge, Globe2, Plane, Settings, Table2, Workflow } from "lucide-react";
+import { appEnvironment, appVersion } from "./build-info";
 
 const links = [
   ["/", "Overview", Gauge],
@@ -21,7 +22,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body>
         <div className="shell">
           <aside className="sidebar">
-            <div className="brand">Flight Data Collector</div>
+            <div className="brand">
+              Flight Data Collector
+              <span className={`environment-badge ${appEnvironment === "PROD" ? "is-prod" : "is-dev"}`}>{appEnvironment}</span>
+              <span className="build-badge">ver {appVersion}</span>
+            </div>
             <nav className="nav">
               {links.map(([href, label, Icon]) => (
                 <a key={href} href={href} title={label}>

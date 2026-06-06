@@ -6,8 +6,10 @@ $RepoRoot = Resolve-Path (Join-Path $ScriptDir "..\..")
 $ComposeFile = Join-Path $RepoRoot "infra\docker-compose.yml"
 $EnvFile = Join-Path $RepoRoot ".env"
 $EnvExample = Join-Path $RepoRoot ".env.example"
+$PackageJson = Get-Content (Join-Path $RepoRoot "package.json") -Raw | ConvertFrom-Json
 
 Write-Host "Flight Data Collector ACE start" -ForegroundColor Cyan
+Write-Host ("Version: ver {0}" -f $PackageJson.version) -ForegroundColor Cyan
 
 if (-not (Test-Path $EnvFile)) {
   Copy-Item $EnvExample $EnvFile
