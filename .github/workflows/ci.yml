@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_DB: flight_data_collector
+          POSTGRES_USER: flight_collector
+          POSTGRES_PASSWORD: flight_collector
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U flight_collector -d flight_data_collector"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://flight_collector:flight_collector@localhost:5432/flight_data_collector
+      REDIS_URL: redis://localhost:6379
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: change-me
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile=false
+      - run: pnpm db:generate
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm smoke
+        env:
+          PLAYWRIGHT_SKIP_WEB_SERVER: "1"
+        continue-on-error: true

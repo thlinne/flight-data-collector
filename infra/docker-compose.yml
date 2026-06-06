@@ -1,0 +1,96 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: flight-data-postgres
+    environment:
+      POSTGRES_DB: flight_data_collector
+      POSTGRES_USER: flight_collector
+      POSTGRES_PASSWORD: flight_collector
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flight_collector -d flight_data_collector"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: flight-data-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  db-init:
+    build:
+      context: ..
+      dockerfile: packages/db/Dockerfile
+    container_name: flight-data-db-init
+    env_file:
+      - ../.env
+    environment:
+      DATABASE_URL: postgresql://flight_collector:flight_collector@postgres:5432/flight_data_collector
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    container_name: flight-data-api
+    env_file:
+      - ../.env
+    environment:
+      DATABASE_URL: postgresql://flight_collector:flight_collector@postgres:5432/flight_data_collector
+      REDIS_URL: redis://redis:6379
+      API_HOST: 0.0.0.0
+      API_PORT: 4000
+    ports:
+      - "4000:4000"
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  collector:
+    build:
+      context: ..
+      dockerfile: apps/collector/Dockerfile
+    container_name: flight-data-collector
+    env_file:
+      - ../.env
+    environment:
+      DATABASE_URL: postgresql://flight_collector:flight_collector@postgres:5432/flight_data_collector
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  dashboard:
+    build:
+      context: ..
+      dockerfile: apps/dashboard/Dockerfile
+    container_name: flight-data-dashboard
+    env_file:
+      - ../.env
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://api:4000
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_started
+
+volumes:
+  postgres_data:

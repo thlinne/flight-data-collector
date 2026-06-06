@@ -1,0 +1,392 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x", "linux-musl"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Priority {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+enum CollectionAreaType {
+  BBOX
+  POLYGON
+  FIR
+}
+
+enum GeometryQuality {
+  APPROXIMATE_BBOX
+  OFFICIAL_POLYGON
+  OFFICIAL_FIR
+}
+
+enum FetchMode {
+  LIVE
+  HISTORICAL
+  MANUAL_TEST
+}
+
+enum TagMethod {
+  BBOX
+  POLYGON
+  FIR
+  MANUAL
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum AlertType {
+  PROVIDER_NO_DATA
+  PROVIDER_LOW_VOLUME
+  PROVIDER_ERROR_RATE_HIGH
+  COLLECTOR_HEARTBEAT_MISSING
+  PROVIDER_DEVIATION
+}
+
+enum NotificationChannel {
+  DASHBOARD
+  EMAIL
+  WEBHOOK
+}
+
+enum AlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+enum CollectorStatus {
+  STARTING
+  RUNNING
+  DEGRADED
+  STOPPED
+}
+
+model Provider {
+  id                       String                  @id @default(cuid())
+  code                     String                  @unique
+  name                     String
+  enabled                  Boolean                 @default(true)
+  supportsLive             Boolean                 @default(true)
+  supportsHistorical       Boolean                 @default(false)
+  baseUrl                  String?
+  notes                    String?
+  createdAt                DateTime                @default(now())
+  updatedAt                DateTime                @updatedAt
+  providerCountryConfigs   ProviderCountryConfig[]
+  fetchRuns                ProviderFetchRun[]
+  rawResponses             RawProviderResponse[]
+  rawObservations          RawFlightObservation[]
+  providerDailyMetrics     ProviderDailyMetric[]
+  alertRules               AlertRule[]
+  alertEvents              AlertEvent[]
+}
+
+model Country {
+  id                       String                  @id @default(cuid())
+  iso2                     String                  @unique
+  iso3                     String                  @unique
+  name                     String
+  enabled                  Boolean                 @default(true)
+  priority                 Priority                @default(NORMAL)
+  primaryUseCase           String?
+  notes                    String?
+  createdAt                DateTime                @default(now())
+  updatedAt                DateTime                @updatedAt
+  collectionAreas          CollectionArea[]
+  providerCountryConfigs   ProviderCountryConfig[]
+  fetchRuns                ProviderFetchRun[]
+  countryObservationTags   CountryObservationTag[]
+  providerDailyMetrics     ProviderDailyMetric[]
+  countryDailyMetrics      CountryDailyMetric[]
+  alertRules               AlertRule[]
+  alertEvents              AlertEvent[]
+}
+
+model CollectionArea {
+  id                     String                  @id @default(cuid())
+  countryId              String
+  type                   CollectionAreaType
+  name                   String
+  bboxNorth              Float?
+  bboxSouth              Float?
+  bboxEast               Float?
+  bboxWest               Float?
+  geoJson                Json?
+  firCode                String?
+  geometryQuality        GeometryQuality         @default(APPROXIMATE_BBOX)
+  enabled                Boolean                 @default(true)
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  country                Country                 @relation(fields: [countryId], references: [id])
+  fetchRuns              ProviderFetchRun[]
+  countryObservationTags CountryObservationTag[]
+}
+
+model ProviderCountryConfig {
+  id                         String    @id @default(cuid())
+  providerId                 String
+  countryId                  String
+  enabled                    Boolean   @default(true)
+  liveEnabled                Boolean   @default(true)
+  historicalEnabled          Boolean   @default(false)
+  livePollingIntervalSeconds Int       @default(300)
+  minPollingIntervalSeconds  Int?
+  maxRequestsPerMinute       Int?
+  maxRequestsPerHour         Int?
+  maxRequestsPerDay          Int?
+  maxCreditsPerDay           Int?
+  priority                   Priority  @default(NORMAL)
+  lowVolumeThresholdCount    Int?
+  lowVolumeWindowMinutes     Int?
+  noDataAlertAfterMinutes    Int?
+  historicalFromDate         DateTime?
+  historicalToDate           DateTime?
+  notes                      String?
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
+  provider                   Provider  @relation(fields: [providerId], references: [id])
+  country                    Country   @relation(fields: [countryId], references: [id])
+
+  @@unique([providerId, countryId])
+}
+
+model ProviderFetchRun {
+  id                 String               @id @default(cuid())
+  providerId         String
+  countryId          String?
+  collectionAreaId   String?
+  mode               FetchMode
+  endpoint           String
+  requestParamsJson  Json
+  startedAt          DateTime
+  finishedAt         DateTime?
+  durationMs         Int?
+  httpStatus         Int?
+  success            Boolean
+  errorCode          String?
+  errorMessage       String?
+  responseHash       String?
+  recordCount        Int?
+  rawResponseId      String?              @unique
+  reviewedAt         DateTime?
+  provider           Provider             @relation(fields: [providerId], references: [id])
+  country            Country?             @relation(fields: [countryId], references: [id])
+  collectionArea     CollectionArea?      @relation(fields: [collectionAreaId], references: [id])
+  rawResponse        RawProviderResponse?
+  rawObservations    RawFlightObservation[]
+}
+
+model RawProviderResponse {
+  id              String                 @id @default(cuid())
+  providerId      String
+  fetchRunId      String                 @unique
+  receivedAt      DateTime
+  contentType     String
+  payloadJson     Json
+  payloadHash     String
+  byteSize        Int?
+  provider        Provider               @relation(fields: [providerId], references: [id])
+  fetchRun        ProviderFetchRun       @relation(fields: [fetchRunId], references: [id])
+  observations    RawFlightObservation[]
+}
+
+model RawFlightObservation {
+  id                     String                  @id @default(cuid())
+  providerId             String
+  fetchRunId             String
+  rawResponseId          String
+  observedAt             DateTime
+  providerAircraftId     String?
+  providerFlightId       String?
+  icao24                 String?
+  callsign               String?
+  registration           String?
+  aircraftTypeIcao       String?
+  operatorName           String?
+  airlineIcao            String?
+  airlineIata            String?
+  originAirportIcao      String?
+  destinationAirportIcao String?
+  latitude               Float
+  longitude              Float
+  altitudeFt             Int?
+  groundSpeedKt          Float?
+  headingDeg             Float?
+  verticalRateFpm        Float?
+  squawk                 String?
+  onGround               Boolean?
+  sourceType             String?
+  rawRecordJson          Json
+  createdAt              DateTime                @default(now())
+  provider               Provider                @relation(fields: [providerId], references: [id])
+  fetchRun               ProviderFetchRun        @relation(fields: [fetchRunId], references: [id])
+  rawResponse            RawProviderResponse     @relation(fields: [rawResponseId], references: [id])
+  flightObservationLinks FlightObservationLink[]
+  countryTags            CountryObservationTag[]
+
+  @@index([providerId, observedAt])
+  @@index([icao24])
+  @@index([callsign])
+}
+
+model NormalizedAircraft {
+  id               String   @id @default(cuid())
+  icao24           String?
+  registration     String?
+  aircraftTypeIcao String?
+  firstSeenAt      DateTime
+  lastSeenAt       DateTime
+}
+
+model NormalizedFlight {
+  id                     String                  @id @default(cuid())
+  callsign               String?
+  icao24                 String?
+  registration           String?
+  aircraftTypeIcao       String?
+  originAirportIcao      String?
+  destinationAirportIcao String?
+  firstObservedAt        DateTime
+  lastObservedAt         DateTime
+  sourceProviderCount    Int                     @default(1)
+  observationCount       Int                     @default(0)
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  observationLinks       FlightObservationLink[]
+}
+
+model FlightObservationLink {
+  id                    String               @id @default(cuid())
+  normalizedFlightId    String
+  rawFlightObservationId String
+  confidenceScore       Float
+  matchReason           String
+  normalizedFlight      NormalizedFlight     @relation(fields: [normalizedFlightId], references: [id])
+  rawFlightObservation  RawFlightObservation @relation(fields: [rawFlightObservationId], references: [id])
+}
+
+model CountryObservationTag {
+  id                     String               @id @default(cuid())
+  rawFlightObservationId String
+  countryId              String
+  collectionAreaId        String
+  tagMethod               TagMethod
+  confidenceScore         Float
+  createdAt               DateTime             @default(now())
+  rawFlightObservation    RawFlightObservation @relation(fields: [rawFlightObservationId], references: [id])
+  country                 Country              @relation(fields: [countryId], references: [id])
+  collectionArea          CollectionArea       @relation(fields: [collectionAreaId], references: [id])
+}
+
+model ProviderDailyMetric {
+  id                    String   @id @default(cuid())
+  providerId            String
+  countryId             String
+  date                  DateTime
+  liveFetchRuns         Int      @default(0)
+  historicalFetchRuns   Int      @default(0)
+  successfulFetchRuns   Int      @default(0)
+  failedFetchRuns       Int      @default(0)
+  rawResponses          Int      @default(0)
+  rawObservations       Int      @default(0)
+  uniqueIcao24          Int      @default(0)
+  uniqueCallsigns       Int      @default(0)
+  uniqueProviderFlights Int      @default(0)
+  firstObservationAt    DateTime?
+  lastObservationAt     DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  provider              Provider @relation(fields: [providerId], references: [id])
+  country               Country  @relation(fields: [countryId], references: [id])
+
+  @@unique([providerId, countryId, date])
+}
+
+model CountryDailyMetric {
+  id                    String   @id @default(cuid())
+  countryId             String
+  date                  DateTime
+  rawObservations       Int      @default(0)
+  uniqueIcao24          Int      @default(0)
+  uniqueCallsigns       Int      @default(0)
+  uniqueProviderFlights Int      @default(0)
+  providerCount         Int      @default(0)
+  firstObservationAt    DateTime?
+  lastObservationAt     DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  country               Country  @relation(fields: [countryId], references: [id])
+
+  @@unique([countryId, date])
+}
+
+model AlertRule {
+  id                      String              @id @default(cuid())
+  code                    String              @unique
+  name                    String
+  enabled                 Boolean             @default(true)
+  severity                AlertSeverity
+  alertType               AlertType
+  providerId              String?
+  countryId               String?
+  evaluationWindowMinutes Int
+  thresholdValue          Float?
+  cooldownMinutes         Int
+  notificationChannel     NotificationChannel @default(DASHBOARD)
+  notificationTarget      String?
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+  provider                Provider?           @relation(fields: [providerId], references: [id])
+  country                 Country?            @relation(fields: [countryId], references: [id])
+  events                  AlertEvent[]
+}
+
+model AlertEvent {
+  id              String        @id @default(cuid())
+  alertRuleId     String
+  severity        AlertSeverity
+  status          AlertStatus   @default(OPEN)
+  providerId      String?
+  countryId       String?
+  message         String
+  measuredValue   Float?
+  thresholdValue  Float?
+  windowStart     DateTime
+  windowEnd       DateTime
+  triggeredAt     DateTime
+  acknowledgedAt  DateTime?
+  resolvedAt      DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  alertRule       AlertRule     @relation(fields: [alertRuleId], references: [id])
+  provider        Provider?     @relation(fields: [providerId], references: [id])
+  country         Country?      @relation(fields: [countryId], references: [id])
+
+  @@index([status, severity])
+}
+
+model CollectorHeartbeat {
+  id           String          @id @default(cuid())
+  serviceName  String
+  hostname     String
+  processId    Int?
+  startedAt    DateTime
+  lastSeenAt   DateTime
+  status       CollectorStatus
+  version      String?
+  metadataJson Json?
+
+  @@unique([serviceName, hostname])
+}
