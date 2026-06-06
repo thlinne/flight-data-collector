@@ -22,7 +22,8 @@ const providers = [
   { code: "AIRNAV_RADARBOX", name: "AirNav RadarBox", supportsLive: true, supportsHistorical: true, baseUrl: null },
   { code: "FLIGHTAWARE", name: "FlightAware AeroAPI", supportsLive: true, supportsHistorical: true, baseUrl: "https://aeroapi.flightaware.com" },
   { code: "RAPID_FLIGHT_RADAR", name: "RapidAPI Flight Radar", supportsLive: true, supportsHistorical: false, baseUrl: "https://flight-radar1.p.rapidapi.com" },
-  { code: "RAPID_ADSBEXCHANGE", name: "RapidAPI ADSBexchange", supportsLive: true, supportsHistorical: false, baseUrl: "https://adsbexchange-com1.p.rapidapi.com" }
+  { code: "RAPID_ADSBEXCHANGE", name: "RapidAPI ADSBexchange", supportsLive: true, supportsHistorical: false, baseUrl: "https://adsbexchange-com1.p.rapidapi.com" },
+  { code: "RAPID_SKYLINK", name: "RapidAPI SkyLink", supportsLive: true, supportsHistorical: false, baseUrl: "https://skylink-api.p.rapidapi.com" }
 ];
 
 const adsbExchangeCoverageAreas = [
@@ -101,10 +102,10 @@ async function main(): Promise<void> {
           enabled: provider.code === "MOCK",
           liveEnabled: provider.code === "MOCK",
           historicalEnabled: provider.code === "MOCK",
-          livePollingIntervalSeconds: country.iso3 === "BDI" ? 60 : 300,
+          livePollingIntervalSeconds: provider.code === "RAPID_SKYLINK" ? 900 : country.iso3 === "BDI" ? 60 : 300,
           minPollingIntervalSeconds: 30,
           maxRequestsPerMinute: 1,
-          maxRequestsPerHour: 60,
+          maxRequestsPerHour: provider.code === "RAPID_SKYLINK" ? 4 : 60,
           maxRequestsPerDay: null,
           maxCreditsPerDay: null,
           priority: country.priority,

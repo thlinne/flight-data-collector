@@ -6,6 +6,7 @@ Implemented:
 - `MockProviderAdapter`
 - `RapidFlightRadarProviderAdapter`, env key `RAPIDAPI_KEY`, BBOX endpoint via `RAPID_FLIGHT_RADAR_HOST`
 - `RapidAdsbExchangeProviderAdapter`, env key `RAPIDAPI_KEY`, radius endpoint via `RAPID_ADSBEXCHANGE_HOST`
+- `RapidSkyLinkProviderAdapter`, env key `RAPIDAPI_KEY`, global live snapshot via `RAPID_SKYLINK_HOST`
 
 Skeletons:
 - `Fr24ProviderAdapter`, env key `FR24_API_KEY`
@@ -24,6 +25,16 @@ GET /v2/lat/{lat}/lon/{lon}/dist/{dist}/
 The v1 adapter derives a temporary center point from the country BBOX and uses `RAPID_ADSBEXCHANGE_RADIUS_NM`, defaulting to `20`. Keep this provider disabled until a deliberate country/provider test is started, because larger radii can increase response bandwidth and RapidAPI cost exposure.
 
 Useful mapped fields include ICAO24 (`hex`), callsign (`flight`), registration (`r`), aircraft type (`t`), position, altitude, speed, heading and squawk.
+
+## RapidAPI SkyLink
+
+SkyLink Pro live ADS-B is integrated through:
+
+```text
+GET /adsb/aircraft?photos=false&offset=0
+```
+
+This endpoint returns a global live snapshot. The adapter filters normalized observations to the requested country BBOX before storing observations, while preserving the full raw provider response. Default seed settings keep SkyLink disabled and use a conservative 900 second interval / 4 requests per hour. Historical ADS-B is intentionally backlogged until the Pro-plan endpoint access is verified.
 
 TODO for real integrations:
 - Confirm official endpoint URLs and query formats.
