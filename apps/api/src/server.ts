@@ -158,10 +158,64 @@ const configUpdateSchema = z.object({
   notes: z.string().nullable().optional()
 });
 
+const referenceDataSourceSchema = z.enum(["OURAIRPORTS", "OPENSKY_AIRCRAFT", "OPENFLIGHTS", "WIKIDATA"]);
+const referenceDataConfigUpdateSchema = z.object({
+  enabled: z.boolean(),
+  monday: z.boolean(),
+  tuesday: z.boolean(),
+  wednesday: z.boolean(),
+  thursday: z.boolean(),
+  friday: z.boolean(),
+  saturday: z.boolean(),
+  sunday: z.boolean(),
+  timeOfDayLocal: z.string().regex(/^\d{2}:\d{2}$/)
+});
+
 app.patch("/configs/:id", async (request, reply) => {
   const params = z.object({ id: z.string() }).parse(request.params);
   const data = configUpdateSchema.parse(request.body);
   return reply.send(await prisma.providerCountryConfig.update({ where: { id: params.id }, data }));
+});
+
+app.get("/reference-data", async () => {
+  const [configs, recentRuns, counts] = await Promise.all([
+    prisma.referenceDataSyncConfig.findMany({ orderBy: { source: "asc" } }),
+    prisma.referenceDataSyncRun.findMany({ orderBy: { startedAt: "desc" }, take: 40 }),
+    Promise.all([
+      prisma.ourAirportsAirport.count(),
+      prisma.openSkyAircraftRecord.count(),
+      prisma.openFlightsAirport.count(),
+      prisma.openFlightsAirline.count(),
+      prisma.openFlightsRoute.count(),
+      prisma.wikidataEntityPlaceholder.count(),
+      prisma.observedAircraftIdentity.count()
+    ])
+  ]);
+  return {
+    configs,
+    recentRuns,
+    counts: {
+      ourAirportsAirports: counts[0],
+      openSkyAircraft: counts[1],
+      openFlightsAirports: counts[2],
+      openFlightsAirlines: counts[3],
+      openFlightsRoutes: counts[4],
+      wikidataEntities: counts[5],
+      observedProviderIdentities: counts[6]
+    }
+  };
+});
+
+app.patch("/reference-data/configs/:id", async (request, reply) => {
+  const params = z.object({ id: z.string() }).parse(request.params);
+  const data = referenceDataConfigUpdateSchema.parse(request.body);
+  return reply.send(await prisma.referenceDataSyncConfig.update({ where: { id: params.id }, data }));
+});
+
+app.post("/reference-data/sync", async (request) => {
+  const body = z.object({ source: referenceDataSourceSchema }).parse(request.body);
+  const job = await collectionQueue.add("reference-data-sync", body, { attempts: 2, backoff: { type: "exponential", delay: 5000 } });
+  return { queued: true, jobId: job.id };
 });
 
 app.patch("/configs/provider/:providerId", async (request, reply) => {

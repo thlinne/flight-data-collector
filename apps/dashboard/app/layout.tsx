@@ -1,6 +1,6 @@
 import "./globals.css";
 import type { ReactNode } from "react";
-import { Activity, Bell, Database, Gauge, Globe2, Plane, Settings, Table2, Workflow } from "lucide-react";
+import { Activity, Bell, BookOpen, Database, Gauge, Globe2, Plane, Settings, Table2, Workflow } from "lucide-react";
 
 const links = [
   ["/", "Overview", Gauge],
@@ -8,6 +8,7 @@ const links = [
   ["/providers", "Providers", Plane],
   ["/control", "Collection Control", Settings],
   ["/raw", "Raw Data Explorer", Database],
+  ["/reference-data", "Reference Data", BookOpen],
   ["/analytics", "Analytics", Table2],
   ["/alerts", "System Alerts", Bell],
   ["/health", "System Health", Activity],

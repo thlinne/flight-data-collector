@@ -37,6 +37,13 @@ const adsbExchangeCoverageAreas = [
   { iso3: "BDI", name: "Burundi Ngozi north", latitude: -2.91, longitude: 29.83, radiusNm: 90, priority: "HIGH" as const }
 ];
 
+const referenceDataSyncConfigs = [
+  { source: "OURAIRPORTS" as const, enabled: true, sunday: true, timeOfDayLocal: "03:30" },
+  { source: "OPENSKY_AIRCRAFT" as const, enabled: true, sunday: true, timeOfDayLocal: "03:45" },
+  { source: "OPENFLIGHTS" as const, enabled: true, sunday: true, timeOfDayLocal: "04:00" },
+  { source: "WIKIDATA" as const, enabled: false, sunday: true, timeOfDayLocal: "04:15" }
+];
+
 async function main(): Promise<void> {
   for (const country of countries) {
     const created = await prisma.country.upsert({
@@ -204,6 +211,30 @@ async function main(): Promise<void> {
       notificationChannel: "DASHBOARD"
     }
   });
+
+  for (const config of referenceDataSyncConfigs) {
+    await prisma.referenceDataSyncConfig.upsert({
+      where: { source: config.source },
+      update: {
+        enabled: config.enabled,
+        sunday: config.sunday,
+        timeOfDayLocal: config.timeOfDayLocal
+      },
+      create: {
+        source: config.source,
+        enabled: config.enabled,
+        monday: false,
+        tuesday: false,
+        wednesday: false,
+        thursday: false,
+        friday: false,
+        saturday: false,
+        sunday: config.sunday,
+        timeOfDayLocal: config.timeOfDayLocal,
+        timezone: "Europe/Berlin"
+      }
+    });
+  }
 }
 
 main()

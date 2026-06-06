@@ -5,6 +5,7 @@ import { prisma } from "@flight-data-collector/db";
 import { createProviderAdapters } from "@flight-data-collector/providers";
 import { evaluateAlerts } from "./alerts.js";
 import { storeFailedFetchRun, storeFetchResult } from "./ingest.js";
+import { enqueueDueReferenceDataSyncs, syncReferenceData } from "./reference-data.js";
 
 const logger = pino({ name: "collector" });
 const redisUrl = new URL(process.env.REDIS_URL ?? "redis://localhost:6379");
@@ -19,6 +20,7 @@ const serviceName = "collector";
 const hostname = os.hostname();
 const startedAt = new Date();
 const scheduled = new Map<string, number>();
+const referenceDataSources = new Set(["OURAIRPORTS", "OPENSKY_AIRCRAFT", "OPENFLIGHTS", "WIKIDATA"]);
 
 async function writeHeartbeat(status: "STARTING" | "RUNNING" | "DEGRADED" | "STOPPED" = "RUNNING"): Promise<void> {
   await prisma.collectorHeartbeat.upsert({
@@ -133,6 +135,14 @@ new Worker(
       await evaluateAlerts();
       return;
     }
+    if (job.name === "reference-data-sync") {
+      const source = (job.data as { source?: string }).source;
+      if (!source || !referenceDataSources.has(source)) {
+        throw new Error(`Unsupported reference data source: ${source ?? "missing"}`);
+      }
+      await syncReferenceData(source as "OURAIRPORTS" | "OPENSKY_AIRCRAFT" | "OPENFLIGHTS" | "WIKIDATA");
+      return;
+    }
     if (job.name === "manual-test-fetch") {
       await runFetch(job.data as { providerId: string; countryId: string }, "MANUAL_TEST");
       return;
@@ -148,9 +158,11 @@ new Worker(
 
 await writeHeartbeat("STARTING");
 await reloadSchedules();
+await enqueueDueReferenceDataSyncs(queue);
 await queue.upsertJobScheduler("alerts:evaluate", { every: Number(process.env.ALERT_EVALUATION_SECONDS ?? 60) * 1000 }, { name: "alert-evaluation", data: {} });
 
 setInterval(() => void writeHeartbeat("RUNNING").catch((error) => logger.error(error)), Number(process.env.COLLECTOR_HEARTBEAT_SECONDS ?? 30) * 1000);
 setInterval(() => void reloadSchedules().catch((error) => logger.error(error)), Number(process.env.COLLECTOR_CONFIG_RELOAD_SECONDS ?? 60) * 1000);
+setInterval(() => void enqueueDueReferenceDataSyncs(queue).catch((error) => logger.error(error)), 60 * 1000);
 
 logger.info("collector started");

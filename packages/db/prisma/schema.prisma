@@ -87,6 +87,20 @@ enum CollectorStatus {
   STOPPED
 }
 
+enum ReferenceDataSource {
+  OURAIRPORTS
+  OPENSKY_AIRCRAFT
+  OPENFLIGHTS
+  WIKIDATA
+  PROVIDER_OBSERVED
+}
+
+enum ReferenceDataSyncStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
 model Provider {
   id                       String                  @id @default(cuid())
   code                     String                  @unique
@@ -103,6 +117,7 @@ model Provider {
   fetchRuns                ProviderFetchRun[]
   rawResponses             RawProviderResponse[]
   rawObservations          RawFlightObservation[]
+  observedAircraftIdentities ObservedAircraftIdentity[]
   providerDailyMetrics     ProviderDailyMetric[]
   providerCoverageAreas     ProviderCoverageArea[]
   alertRules               AlertRule[]
@@ -285,6 +300,195 @@ model RawFlightObservation {
   @@index([providerId, observedAt])
   @@index([icao24])
   @@index([callsign])
+}
+
+model OurAirportsAirport {
+  id                 String   @id @default(cuid())
+  sourceId           Int      @unique
+  ident              String?
+  type               String?
+  name               String
+  latitude           Float?
+  longitude          Float?
+  elevationFt        Int?
+  continent          String?
+  isoCountry         String?
+  isoRegion          String?
+  municipality       String?
+  scheduledService   String?
+  gpsCode            String?
+  iataCode           String?
+  localCode          String?
+  homeLink           String?
+  wikipediaLink      String?
+  keywords           String?
+  sourceUpdatedAt    DateTime?
+  syncedAt           DateTime @default(now())
+  rawCsvJson         Json
+
+  @@index([ident])
+  @@index([iataCode])
+  @@index([isoCountry])
+}
+
+model OpenSkyAircraftRecord {
+  id                 String   @id @default(cuid())
+  icao24             String   @unique
+  registration       String?
+  manufacturerIcao   String?
+  manufacturerName   String?
+  model              String?
+  typecode           String?
+  serialNumber       String?
+  lineNumber         String?
+  icaoAircraftType   String?
+  operatorName       String?
+  operatorCallsign   String?
+  operatorIcao       String?
+  operatorIata       String?
+  owner              String?
+  testReg            String?
+  registered         String?
+  regUntil           String?
+  status             String?
+  built              String?
+  firstFlightDate    String?
+  seatConfiguration  String?
+  engines            String?
+  modes              Boolean?
+  adsb               Boolean?
+  acars              Boolean?
+  notes              String?
+  categoryDescription String?
+  syncedAt           DateTime @default(now())
+  rawCsvJson         Json
+
+  @@index([registration])
+  @@index([operatorIcao])
+}
+
+model OpenFlightsAirport {
+  id             String   @id @default(cuid())
+  sourceId       Int      @unique
+  name           String?
+  city           String?
+  country        String?
+  iataCode       String?
+  icaoCode       String?
+  latitude       Float?
+  longitude      Float?
+  altitudeFt     Int?
+  timezone       Float?
+  dst            String?
+  tzDatabaseName String?
+  type           String?
+  source         String?
+  syncedAt       DateTime @default(now())
+  rawCsvJson     Json
+
+  @@index([iataCode])
+  @@index([icaoCode])
+  @@index([country])
+}
+
+model OpenFlightsAirline {
+  id          String   @id @default(cuid())
+  sourceId    Int      @unique
+  name        String?
+  alias       String?
+  iataCode    String?
+  icaoCode    String?
+  callsign    String?
+  country     String?
+  active      String?
+  syncedAt    DateTime @default(now())
+  rawCsvJson  Json
+
+  @@index([iataCode])
+  @@index([icaoCode])
+  @@index([country])
+}
+
+model OpenFlightsRoute {
+  id                  String   @id @default(cuid())
+  sourceAirlineCode    String?
+  sourceAirlineId      String?
+  sourceAirportCode    String?
+  sourceAirportId      String?
+  destinationAirportCode String?
+  destinationAirportId String?
+  codeshare            String?
+  stops                Int?
+  equipment            String?
+  syncedAt             DateTime @default(now())
+  rawCsvJson           Json
+
+  @@index([sourceAirlineCode])
+  @@index([sourceAirportCode])
+  @@index([destinationAirportCode])
+}
+
+model WikidataEntityPlaceholder {
+  id             String   @id @default(cuid())
+  entityId       String   @unique
+  entityType     String?
+  label          String?
+  description    String?
+  syncedAt       DateTime @default(now())
+  rawJson        Json
+}
+
+model ReferenceDataSyncConfig {
+  id             String              @id @default(cuid())
+  source         ReferenceDataSource @unique
+  enabled        Boolean             @default(false)
+  monday         Boolean             @default(false)
+  tuesday        Boolean             @default(false)
+  wednesday      Boolean             @default(false)
+  thursday       Boolean             @default(false)
+  friday         Boolean             @default(false)
+  saturday       Boolean             @default(false)
+  sunday         Boolean             @default(true)
+  timeOfDayLocal String              @default("03:30")
+  timezone       String              @default("Europe/Berlin")
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+}
+
+model ReferenceDataSyncRun {
+  id             String                  @id @default(cuid())
+  source         ReferenceDataSource
+  status         ReferenceDataSyncStatus @default(RUNNING)
+  startedAt      DateTime                @default(now())
+  finishedAt     DateTime?
+  durationMs     Int?
+  recordsSeen    Int                     @default(0)
+  recordsUpserted Int                    @default(0)
+  errorMessage   String?
+  metadataJson   Json?
+
+  @@index([source, startedAt])
+}
+
+model ObservedAircraftIdentity {
+  id                String   @id @default(cuid())
+  providerId        String
+  identityKey       String
+  icao24            String?
+  callsign          String?
+  registration      String?
+  aircraftType      String?
+  operatorName      String?
+  firstObservedAt   DateTime
+  lastObservedAt    DateTime
+  observationCount  Int      @default(1)
+  rawExamplesJson   Json?
+  provider          Provider @relation(fields: [providerId], references: [id])
+
+  @@unique([providerId, identityKey])
+  @@index([icao24])
+  @@index([registration])
+  @@index([operatorName])
 }
 
 model NormalizedAircraft {

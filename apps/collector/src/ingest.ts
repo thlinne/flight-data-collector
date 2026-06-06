@@ -14,6 +14,55 @@ function toJsonValue(value: unknown): JsonInput {
   return JSON.parse(JSON.stringify(value ?? {})) as JsonInput;
 }
 
+function normalizeIdentityPart(value: string | null | undefined): string {
+  return (value ?? "").trim().toUpperCase();
+}
+
+function identityKey(record: ProviderFetchResult["records"][number]): string | null {
+  const parts = [
+    normalizeIdentityPart(record.icao24),
+    normalizeIdentityPart(record.callsign),
+    normalizeIdentityPart(record.registration),
+    normalizeIdentityPart(record.aircraftTypeIcao),
+    normalizeIdentityPart(record.operatorName)
+  ];
+  if (parts.every((part) => part.length === 0)) return null;
+  return parts.join("|");
+}
+
+async function storeObservedIdentity(tx: TransactionClient, providerId: string, record: ProviderFetchResult["records"][number]): Promise<void> {
+  const key = identityKey(record);
+  if (!key) return;
+  const existing = await tx.observedAircraftIdentity.findUnique({
+    where: { providerId_identityKey: { providerId, identityKey: key } }
+  });
+  if (existing) {
+    await tx.observedAircraftIdentity.update({
+      where: { id: existing.id },
+      data: {
+        lastObservedAt: record.observedAt,
+        observationCount: { increment: 1 },
+        rawExamplesJson: toJsonValue(record.rawRecord)
+      }
+    });
+    return;
+  }
+  await tx.observedAircraftIdentity.create({
+    data: {
+      providerId,
+      identityKey: key,
+      icao24: record.icao24,
+      callsign: record.callsign,
+      registration: record.registration,
+      aircraftType: record.aircraftTypeIcao,
+      operatorName: record.operatorName,
+      firstObservedAt: record.observedAt,
+      lastObservedAt: record.observedAt,
+      rawExamplesJson: toJsonValue(record.rawRecord)
+    }
+  });
+}
+
 export async function storeFetchResult(input: {
   providerId: string;
   countryId: string;
@@ -57,6 +106,7 @@ export async function storeFetchResult(input: {
 
     const area = await tx.collectionArea.findUniqueOrThrow({ where: { id: input.collectionAreaId } });
     for (const record of input.result.records) {
+      await storeObservedIdentity(tx, input.providerId, record);
       const observation = await tx.rawFlightObservation.create({
         data: {
           providerId: input.providerId,
