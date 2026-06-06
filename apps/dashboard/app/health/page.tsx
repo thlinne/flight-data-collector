@@ -17,6 +17,10 @@ export default async function HealthPage() {
         <div className="card metric">Redis<strong>{health.redis}</strong></div>
         <div className="card metric">Queue<strong>{health.queue}</strong></div>
       </section>
+      <h2>Database backup</h2>
+      <div className="toolbar">
+        <a className="button" href="/health/database-backup.sql">Download database backup</a>
+      </div>
       <h2>Collector heartbeat</h2>
       <table className="table">
         <thead><tr><th>Service</th><th>Status</th><th>Last seen</th><th>Started</th><th>Version</th></tr></thead>

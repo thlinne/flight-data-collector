@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import cors from "@fastify/cors";
 import { Queue } from "bullmq";
 import Fastify from "fastify";
@@ -335,6 +336,37 @@ app.patch("/system-health/failed-runs/review", async (_request, reply) => {
     data: { reviewedAt: new Date() }
   });
   return reply.send({ reviewed: result.count });
+});
+
+app.get("/admin/database-backup.sql", async (_request, reply) => {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    return reply.code(500).send({ error: "DATABASE_URL is not configured" });
+  }
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const filename = `flight_data_collector_${timestamp}.sql`;
+  const dump = spawn("pg_dump", ["--no-owner", "--no-privileges", databaseUrl], {
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+
+  const errors: Buffer[] = [];
+  dump.stderr.on("data", (chunk: Buffer) => errors.push(chunk));
+  dump.on("error", (error) => {
+    if (!reply.sent) {
+      void reply.code(500).send({ error: error.message });
+    }
+  });
+  dump.on("close", (code) => {
+    if (code && !reply.sent) {
+      void reply.code(500).send({ error: Buffer.concat(errors).toString("utf8") || `pg_dump exited with code ${code}` });
+    }
+  });
+
+  return reply
+    .header("Content-Type", "application/sql; charset=utf-8")
+    .header("Content-Disposition", `attachment; filename="${filename}"`)
+    .send(dump.stdout);
 });
 
 app.post("/manual-test-fetch", async (request) => {

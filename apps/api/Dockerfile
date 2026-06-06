@@ -1,7 +1,7 @@
 FROM node:20-bookworm-slim AS base
 WORKDIR /app
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && apt-get install -y --no-install-recommends openssl ca-certificates postgresql-client \
   && rm -rf /var/lib/apt/lists/*
 RUN corepack enable
 
