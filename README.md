@@ -19,6 +19,14 @@ Docker:
 docker compose -f infra/docker-compose.yml up --build
 ```
 
+ACE 24/7 Windows deployment scripts are in:
+
+```text
+deploy/windows
+```
+
+See `deploy/windows/README-ACE-WINDOWS.md`.
+
 Services:
 - Dashboard: http://localhost:3000
 - API: http://localhost:4000
