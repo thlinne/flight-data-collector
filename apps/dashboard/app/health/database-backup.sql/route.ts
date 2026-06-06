@@ -15,7 +15,16 @@ export async function GET() {
   });
 
   if (!response.ok || !response.body) {
-    return NextResponse.json({ error: "Database backup failed" }, { status: 502 });
+    const contentType = response.headers.get("content-type") ?? "";
+    const bodyText = await response.text();
+    if (contentType.includes("application/json")) {
+      try {
+        return NextResponse.json(JSON.parse(bodyText) as unknown, { status: response.status });
+      } catch {
+        return NextResponse.json({ error: bodyText || "Database backup failed" }, { status: response.status });
+      }
+    }
+    return NextResponse.json({ error: bodyText || "Database backup failed" }, { status: response.status });
   }
 
   return new Response(response.body, {
