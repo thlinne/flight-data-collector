@@ -139,7 +139,7 @@ export class RapidFlightRadarProviderAdapter implements FlightDataProviderAdapte
   private defaultService =
     "PASSENGER,CARGO,MILITARY_AND_GOVERNMENT,BUSINESS_JETS,GENERAL_AVIATION,HELICOPTERS,LIGHTER_THAN_AIR,DRONES,OTHER_SERVICE,NON_CATEGORIZED,GLIDERS,GROUND_VEHICLES";
 
-  async fetchLivePositions(input: { bbox: BoundingBox; since?: Date; limit?: number }): Promise<ProviderFetchResult> {
+  async fetchLivePositions(input: { bbox: BoundingBox; since?: Date; limit?: number; livePoint?: { latitude: number; longitude: number; radiusNm: number } }): Promise<ProviderFetchResult> {
     const apiKey = process.env.RAPIDAPI_KEY;
     const host = process.env.RAPID_FLIGHT_RADAR_HOST ?? "flight-radar1.p.rapidapi.com";
     const endpoint = process.env.RAPID_FLIGHT_RADAR_LIVE_ENDPOINT ?? "/flights/v2/list-in-boundary";

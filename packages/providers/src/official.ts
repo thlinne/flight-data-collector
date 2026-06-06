@@ -9,7 +9,7 @@ abstract class OfficialProviderAdapter implements FlightDataProviderAdapter {
 
   protected abstract apiKeyEnvName: string;
 
-  async fetchLivePositions(input: { bbox: BoundingBox; since?: Date; limit?: number }): Promise<ProviderFetchResult> {
+  async fetchLivePositions(input: { bbox: BoundingBox; since?: Date; limit?: number; livePoint?: { latitude: number; longitude: number; radiusNm: number } }): Promise<ProviderFetchResult> {
     return this.todoResult("LIVE", input);
   }
 

@@ -56,6 +56,9 @@ async function runFetch(data: { providerId: string; countryId: string; providerC
     prisma.provider.findUniqueOrThrow({ where: { id: data.providerId } }),
     prisma.country.findUniqueOrThrow({ where: { id: data.countryId }, include: { collectionAreas: { where: { enabled: true }, take: 1 } } })
   ]);
+  const config = await prisma.providerCountryConfig.findUnique({
+    where: { providerId_countryId: { providerId: provider.id, countryId: country.id } }
+  });
   const area = country.collectionAreas[0];
   const adapter = adapters.get(data.providerCode ?? provider.code);
   if (!area || !adapter || area.bboxNorth == null || area.bboxSouth == null || area.bboxEast == null || area.bboxWest == null) {
@@ -74,7 +77,11 @@ async function runFetch(data: { providerId: string; countryId: string; providerC
 
   try {
     const result = await adapter.fetchLivePositions({
-      bbox: { north: area.bboxNorth, south: area.bboxSouth, east: area.bboxEast, west: area.bboxWest }
+      bbox: { north: area.bboxNorth, south: area.bboxSouth, east: area.bboxEast, west: area.bboxWest },
+      livePoint:
+        config?.liveLatitude != null && config.liveLongitude != null && config.liveRadiusNm != null
+          ? { latitude: config.liveLatitude, longitude: config.liveLongitude, radiusNm: config.liveRadiusNm }
+          : undefined
     });
     await storeFetchResult({ providerId: provider.id, countryId: country.id, collectionAreaId: area.id, mode, startedAt, result });
   } catch (error) {

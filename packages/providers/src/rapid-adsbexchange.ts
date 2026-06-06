@@ -81,7 +81,12 @@ export class RapidAdsbExchangeProviderAdapter implements FlightDataProviderAdapt
   supportsLive = true;
   supportsHistorical = false;
 
-  async fetchLivePositions(input: { bbox: BoundingBox; since?: Date; limit?: number }): Promise<ProviderFetchResult> {
+  async fetchLivePositions(input: {
+    bbox: BoundingBox;
+    since?: Date;
+    limit?: number;
+    livePoint?: { latitude: number; longitude: number; radiusNm: number };
+  }): Promise<ProviderFetchResult> {
     const apiKey = process.env.RAPIDAPI_KEY;
     const host = process.env.RAPID_ADSBEXCHANGE_HOST ?? "adsbexchange-com1.p.rapidapi.com";
     const defaultRadiusNm = Number(process.env.RAPID_ADSBEXCHANGE_RADIUS_NM ?? 20);
@@ -91,8 +96,8 @@ export class RapidAdsbExchangeProviderAdapter implements FlightDataProviderAdapt
       throw new Error("RAPIDAPI_KEY is not configured.");
     }
 
-    const center = bboxCenter(input.bbox);
-    const endpoint = `/v2/lat/${center.latitude.toFixed(5)}/lon/${center.longitude.toFixed(5)}/dist/${radiusNm}/`;
+    const center = input.livePoint ?? { ...bboxCenter(input.bbox), radiusNm };
+    const endpoint = `/v2/lat/${center.latitude.toFixed(5)}/lon/${center.longitude.toFixed(5)}/dist/${center.radiusNm}/`;
     const url = new URL(`https://${host}${endpoint}`);
 
     const response = await fetch(url, {
@@ -133,7 +138,7 @@ export class RapidAdsbExchangeProviderAdapter implements FlightDataProviderAdapt
       requestParams: {
         latitude: center.latitude,
         longitude: center.longitude,
-        radiusNm,
+        radiusNm: center.radiusNm,
         bbox: input.bbox
       },
       receivedAt: new Date(),

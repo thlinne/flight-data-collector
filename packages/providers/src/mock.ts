@@ -11,7 +11,7 @@ export class MockProviderAdapter implements FlightDataProviderAdapter {
   supportsLive = true;
   supportsHistorical = true;
 
-  async fetchLivePositions(input: { bbox: BoundingBox; since?: Date; limit?: number }): Promise<ProviderFetchResult> {
+  async fetchLivePositions(input: { bbox: BoundingBox; since?: Date; limit?: number; livePoint?: { latitude: number; longitude: number; radiusNm: number } }): Promise<ProviderFetchResult> {
     const count = input.limit ?? 8;
     const records = this.makeRecords(input.bbox, count, new Date());
     return {

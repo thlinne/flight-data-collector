@@ -142,6 +142,9 @@ model ProviderCountryConfig {
   liveEnabled                Boolean   @default(true)
   historicalEnabled          Boolean   @default(false)
   livePollingIntervalSeconds Int       @default(300)
+  liveLatitude               Float?
+  liveLongitude              Float?
+  liveRadiusNm               Int?
   minPollingIntervalSeconds  Int?
   maxRequestsPerMinute       Int?
   maxRequestsPerHour         Int?

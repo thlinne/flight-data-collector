@@ -111,6 +111,20 @@ async function main(): Promise<void> {
     data: { maxRequestsPerHour: 60 }
   });
 
+  const adsbExchange = await prisma.provider.findUnique({ where: { code: "RAPID_ADSBEXCHANGE" } });
+  const libya = await prisma.country.findUnique({ where: { iso3: "LBY" } });
+  if (adsbExchange && libya) {
+    await prisma.providerCountryConfig.update({
+      where: { providerId_countryId: { providerId: adsbExchange.id, countryId: libya.id } },
+      data: {
+        liveLatitude: 32.8872,
+        liveLongitude: 13.1913,
+        liveRadiusNm: 50,
+        notes: "ADSBexchange test point: Tripoli area, radius 50 NM."
+      }
+    });
+  }
+
   await prisma.alertRule.upsert({
     where: { code: "collector-heartbeat-missing" },
     update: {},

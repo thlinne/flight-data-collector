@@ -5,7 +5,12 @@ export interface FlightDataProviderAdapter {
   displayName: string;
   supportsLive: boolean;
   supportsHistorical: boolean;
-  fetchLivePositions(input: { bbox: BoundingBox; since?: Date; limit?: number }): Promise<ProviderFetchResult>;
+  fetchLivePositions(input: {
+    bbox: BoundingBox;
+    since?: Date;
+    limit?: number;
+    livePoint?: { latitude: number; longitude: number; radiusNm: number };
+  }): Promise<ProviderFetchResult>;
   fetchHistoricalPositions(input: {
     bbox: BoundingBox;
     from: Date;
