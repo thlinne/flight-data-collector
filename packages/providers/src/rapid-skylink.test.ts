@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { mapSkyLinkAircraft } from "./rapid-skylink.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { mapSkyLinkAircraft, RapidSkyLinkProviderAdapter } from "./rapid-skylink.js";
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+});
 
 describe("RapidSkyLinkProviderAdapter mapping", () => {
   it("maps SkyLink aircraft records to normalized observations", () => {
@@ -36,5 +41,44 @@ describe("RapidSkyLinkProviderAdapter mapping", () => {
       onGround: false,
       sourceType: "rapid-skylink"
     });
+  });
+
+  it("requests live aircraft with a server-side bounding box filter", async () => {
+    vi.stubEnv("RAPIDAPI_KEY", "test-key");
+    const fetchMock = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          aircraft: [
+            {
+              icao24: "0101F6",
+              callsign: "OYA220",
+              latitude: 33.197563,
+              longitude: 13.05798,
+              last_seen: "2026-06-08T09:00:00"
+            }
+          ]
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new RapidSkyLinkProviderAdapter();
+    const result = await adapter.fetchLivePositions({
+      bbox: { south: 19.5, west: 9.3, north: 33.3, east: 25.2 }
+    });
+
+    const firstCall = fetchMock.mock.calls[0] as unknown[] | undefined;
+    expect(firstCall).toBeDefined();
+    const requestedUrl = new URL(String(firstCall?.[0]));
+    expect(requestedUrl.pathname).toBe("/adsb/aircraft");
+    expect(requestedUrl.searchParams.get("photos")).toBe("false");
+    expect(requestedUrl.searchParams.get("bbox")).toBe("19.5,9.3,33.3,25.2");
+    expect(requestedUrl.searchParams.has("offset")).toBe(false);
+    expect(result.requestParams).toMatchObject({
+      bbox: "19.5,9.3,33.3,25.2",
+      serverSideBboxFilter: true
+    });
+    expect(result.records).toHaveLength(1);
   });
 });

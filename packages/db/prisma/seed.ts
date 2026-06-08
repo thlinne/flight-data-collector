@@ -1,4 +1,29 @@
-import { PrismaClient } from "@prisma/client";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { Prisma, PrismaClient } from "@prisma/client";
+
+function loadEnvFile(): void {
+  const candidates = [resolve(process.cwd(), ".env"), resolve(process.cwd(), "../..", ".env")];
+  const envPath = candidates.find((candidate) => existsSync(candidate));
+  if (!envPath) return;
+
+  for (const line of readFileSync(envPath, "utf8").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const separatorIndex = trimmed.indexOf("=");
+    if (separatorIndex === -1) continue;
+    const key = trimmed.slice(0, separatorIndex).trim();
+    const rawValue = trimmed.slice(separatorIndex + 1).trim();
+    const value = rawValue.replace(/^"(.*)"$/, "$1").replace(/^'(.*)'$/, "$1");
+    if (key === "APP_ENVIRONMENT" || key === "NEXT_PUBLIC_APP_ENVIRONMENT") {
+      process.env[key] = value;
+    } else {
+      process.env[key] ??= value;
+    }
+  }
+}
+
+loadEnvFile();
 
 const prisma = new PrismaClient();
 
@@ -16,51 +41,111 @@ const countries = [
 ];
 
 const providers = [
-  { code: "MOCK", name: "Mock Provider", integrationStatus: "TESTING" as const, supportsLive: true, supportsHistorical: true, baseUrl: "mock://local" },
-  { code: "FR24", name: "Flightradar24", integrationStatus: "PLANNED" as const, supportsLive: true, supportsHistorical: true, baseUrl: "https://api.flightradar24.com" },
-  { code: "PLANE_FINDER", name: "Plane Finder", integrationStatus: "PLANNED" as const, supportsLive: true, supportsHistorical: true, baseUrl: null },
-  { code: "AIRNAV_RADARBOX", name: "AirNav RadarBox", integrationStatus: "PLANNED" as const, supportsLive: true, supportsHistorical: true, baseUrl: null },
-  { code: "FLIGHTAWARE", name: "FlightAware AeroAPI", integrationStatus: "PLANNED" as const, supportsLive: true, supportsHistorical: true, baseUrl: "https://aeroapi.flightaware.com" },
+  { code: "PLANE_FINDER", name: "Plane Finder API", integrationStatus: "TESTING" as const, supportsLive: true, supportsHistorical: true, baseUrl: "https://api.planefinder.net/api" },
   { code: "RAPID_FLIGHT_RADAR", name: "RapidAPI Flight Radar", integrationStatus: "WORKING" as const, supportsLive: true, supportsHistorical: false, baseUrl: "https://flight-radar1.p.rapidapi.com" },
   { code: "RAPID_ADSBEXCHANGE", name: "RapidAPI ADSBexchange", integrationStatus: "WORKING" as const, supportsLive: true, supportsHistorical: false, baseUrl: "https://adsbexchange-com1.p.rapidapi.com" },
   { code: "RAPID_SKYLINK", name: "RapidAPI SkyLink", integrationStatus: "TESTING" as const, supportsLive: true, supportsHistorical: false, baseUrl: "https://skylink-api.p.rapidapi.com" }
 ];
+const activeProviderCodes = providers.map((provider) => provider.code);
+const appEnvironment = (process.env.APP_ENVIRONMENT ?? process.env.NEXT_PUBLIC_APP_ENVIRONMENT ?? "DEV").toUpperCase();
+const defaultLivePollingIntervalSeconds = appEnvironment === "PROD" ? 600 : 60;
 
 const adsbExchangeCoverageAreas = [
-  { iso3: "LBY", name: "Libya Tripoli west/northwest", latitude: 32.8872, longitude: 13.1913, radiusNm: 250, priority: "CRITICAL" as const },
-  { iso3: "LBY", name: "Libya Benghazi northeast", latitude: 32.1167, longitude: 20.0667, radiusNm: 250, priority: "CRITICAL" as const },
-  { iso3: "LBY", name: "Libya Sabha central/south", latitude: 27.0377, longitude: 14.4283, radiusNm: 250, priority: "HIGH" as const },
-  { iso3: "LBY", name: "Libya Kufra southeast", latitude: 24.1786, longitude: 23.313, radiusNm: 250, priority: "HIGH" as const },
-  { iso3: "LBY", name: "Libya Ghat southwest", latitude: 25.1456, longitude: 10.1426, radiusNm: 250, priority: "HIGH" as const },
-  { iso3: "BDI", name: "Burundi Bujumbura west", latitude: -3.324, longitude: 29.318, radiusNm: 120, priority: "CRITICAL" as const },
-  { iso3: "BDI", name: "Burundi Gitega center", latitude: -3.427, longitude: 29.924, radiusNm: 120, priority: "CRITICAL" as const },
-  { iso3: "BDI", name: "Burundi Ngozi north", latitude: -2.91, longitude: 29.83, radiusNm: 90, priority: "HIGH" as const },
-  { iso3: "COD", name: "DRC Kinshasa west", latitude: -4.325, longitude: 15.322, radiusNm: 250, priority: "HIGH" as const },
-  { iso3: "COD", name: "DRC Mbandaka northwest", latitude: 0.048, longitude: 18.26, radiusNm: 250, priority: "HIGH" as const },
-  { iso3: "COD", name: "DRC Kisangani center", latitude: 0.516, longitude: 25.191, radiusNm: 250, priority: "HIGH" as const },
-  { iso3: "COD", name: "DRC Goma east", latitude: -1.674, longitude: 29.238, radiusNm: 250, priority: "HIGH" as const },
-  { iso3: "COD", name: "DRC Lubumbashi southeast", latitude: -11.664, longitude: 27.479, radiusNm: 250, priority: "HIGH" as const },
-  { iso3: "COD", name: "DRC Kananga south-central", latitude: -5.896, longitude: 22.416, radiusNm: 250, priority: "HIGH" as const },
-  { iso3: "MWI", name: "Malawi Lilongwe center", latitude: -13.962, longitude: 33.774, radiusNm: 180, priority: "NORMAL" as const },
-  { iso3: "MWI", name: "Malawi Blantyre south", latitude: -15.786, longitude: 35.005, radiusNm: 180, priority: "NORMAL" as const },
-  { iso3: "ERI", name: "Eritrea Asmara west", latitude: 15.322, longitude: 38.925, radiusNm: 220, priority: "NORMAL" as const },
-  { iso3: "ERI", name: "Eritrea Massawa coast", latitude: 15.609, longitude: 39.455, radiusNm: 220, priority: "NORMAL" as const },
-  { iso3: "DJI", name: "Djibouti national coverage", latitude: 11.825, longitude: 42.59, radiusNm: 160, priority: "NORMAL" as const },
-  { iso3: "MLI", name: "Mali Bamako southwest", latitude: 12.639, longitude: -8.003, radiusNm: 250, priority: "HIGH" as const },
-  { iso3: "MLI", name: "Mali Kayes west", latitude: 14.446, longitude: -11.444, radiusNm: 250, priority: "HIGH" as const },
-  { iso3: "MLI", name: "Mali Mopti center", latitude: 14.493, longitude: -4.194, radiusNm: 250, priority: "HIGH" as const },
-  { iso3: "MLI", name: "Mali Gao east", latitude: 16.266, longitude: -0.05, radiusNm: 250, priority: "HIGH" as const },
-  { iso3: "MLI", name: "Mali Timbuktu north", latitude: 16.766, longitude: -3.002, radiusNm: 250, priority: "HIGH" as const },
-  { iso3: "MLI", name: "Mali Kidal northeast", latitude: 18.441, longitude: 1.407, radiusNm: 250, priority: "HIGH" as const },
-  { iso3: "TCD", name: "Chad NDjamena southwest", latitude: 12.134, longitude: 15.055, radiusNm: 250, priority: "HIGH" as const },
-  { iso3: "TCD", name: "Chad Abeche east", latitude: 13.829, longitude: 20.832, radiusNm: 250, priority: "HIGH" as const },
-  { iso3: "TCD", name: "Chad Faya north", latitude: 17.929, longitude: 19.111, radiusNm: 250, priority: "HIGH" as const },
-  { iso3: "TCD", name: "Chad Moundou south", latitude: 8.566, longitude: 16.083, radiusNm: 250, priority: "HIGH" as const },
-  { iso3: "TCD", name: "Chad Sarh southeast", latitude: 9.143, longitude: 18.392, radiusNm: 250, priority: "HIGH" as const },
-  { iso3: "LSO", name: "Lesotho national coverage", latitude: -29.61, longitude: 28.233, radiusNm: 140, priority: "NORMAL" as const },
-  { iso3: "SSD", name: "South Sudan Juba south", latitude: 4.859, longitude: 31.571, radiusNm: 250, priority: "HIGH" as const },
-  { iso3: "SSD", name: "South Sudan Malakal north", latitude: 9.533, longitude: 31.65, radiusNm: 250, priority: "HIGH" as const },
-  { iso3: "SSD", name: "South Sudan Wau west", latitude: 7.702, longitude: 27.981, radiusNm: 250, priority: "HIGH" as const }
+  { iso3: "BDI", name: "BDI mixed 01 100 NM", latitude: -3.4833, longitude: 29.9185, radiusNm: 100, priority: "CRITICAL" as const },
+  { iso3: "LBY", name: "LBY mixed 01 250 NM", latitude: 25.2083, longitude: 19.2083, radiusNm: 250, priority: "HIGH" as const },
+  { iso3: "LBY", name: "LBY mixed 02 250 NM", latitude: 28.375, longitude: 12.1376, radiusNm: 250, priority: "HIGH" as const },
+  { iso3: "LBY", name: "LBY mixed 03 250 NM", latitude: 31.5417, longitude: 22.7437, radiusNm: 250, priority: "HIGH" as const },
+  { iso3: "LBY", name: "LBY mixed 04 250 NM", latitude: 22.0417, longitude: 12.1376, radiusNm: 250, priority: "HIGH" as const },
+  { iso3: "LBY", name: "LBY mixed 05 250 NM", latitude: 22.0417, longitude: 22.7437, radiusNm: 250, priority: "HIGH" as const },
+  { iso3: "LBY", name: "LBY mixed 06 100 NM", latitude: 31.9167, longitude: 16.0916, radiusNm: 100, priority: "CRITICAL" as const },
+  { iso3: "LBY", name: "LBY mixed 07 100 NM", latitude: 20.5167, longitude: 17.5058, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "LBY", name: "LBY mixed 08 100 NM", latitude: 30.65, longitude: 17.5058, radiusNm: 100, priority: "CRITICAL" as const },
+  { iso3: "LBY", name: "LBY mixed 09 100 NM", latitude: 33.1833, longitude: 11.8492, radiusNm: 100, priority: "CRITICAL" as const },
+  { iso3: "LBY", name: "LBY mixed 10 100 NM", latitude: 26.85, longitude: 24.5765, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "LBY", name: "LBY mixed 11 50 NM", latitude: 32.675, longitude: 9.8675, radiusNm: 50, priority: "NORMAL" as const },
+  { iso3: "LBY", name: "LBY mixed 12 50 NM", latitude: 32.675, longitude: 14.11, radiusNm: 50, priority: "NORMAL" as const },
+  { iso3: "LBY", name: "LBY mixed 13 50 NM", latitude: 33.3083, longitude: 17.6453, radiusNm: 50, priority: "NORMAL" as const },
+  { iso3: "LBY", name: "LBY mixed 14 50 NM", latitude: 32.675, longitude: 18.3524, radiusNm: 50, priority: "NORMAL" as const },
+  { iso3: "COD", name: "COD mixed 01 250 NM", latitude: -7.7917, longitude: 21.0972, radiusNm: 250, priority: "HIGH" as const },
+  { iso3: "COD", name: "COD mixed 02 250 NM", latitude: -1.4583, longitude: 27.4464, radiusNm: 250, priority: "HIGH" as const },
+  { iso3: "COD", name: "COD mixed 03 250 NM", latitude: 1.7083, longitude: 17.9226, radiusNm: 250, priority: "HIGH" as const },
+  { iso3: "COD", name: "COD mixed 04 250 NM", latitude: -10.9583, longitude: 27.4464, radiusNm: 250, priority: "HIGH" as const },
+  { iso3: "COD", name: "COD mixed 05 250 NM", latitude: -7.7917, longitude: 14.748, radiusNm: 250, priority: "HIGH" as const },
+  { iso3: "COD", name: "COD mixed 06 250 NM", latitude: 4.875, longitude: 24.2718, radiusNm: 250, priority: "HIGH" as const },
+  { iso3: "COD", name: "COD mixed 07 250 NM", latitude: -1.4583, longitude: 14.748, radiusNm: 250, priority: "HIGH" as const },
+  { iso3: "COD", name: "COD mixed 08 250 NM", latitude: -14.125, longitude: 17.9226, radiusNm: 250, priority: "HIGH" as const },
+  { iso3: "COD", name: "COD mixed 09 100 NM", latitude: 3.9833, longitude: 29.7271, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "COD", name: "COD mixed 10 100 NM", latitude: -2.35, longitude: 22.1081, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "COD", name: "COD mixed 11 100 NM", latitude: 3.9833, longitude: 13.2192, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "COD", name: "COD mixed 12 100 NM", latitude: -6.15, longitude: 25.9176, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "COD", name: "COD mixed 13 100 NM", latitude: -3.6167, longitude: 19.5684, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "COD", name: "COD mixed 14 100 NM", latitude: -12.4833, longitude: 13.2192, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "COD", name: "COD mixed 15 100 NM", latitude: -12.4833, longitude: 23.3779, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "COD", name: "COD mixed 16 100 NM", latitude: 0.1833, longitude: 22.1081, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "COD", name: "COD mixed 17 100 NM", latitude: 1.45, longitude: 30.9969, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "COD", name: "COD mixed 18 100 NM", latitude: -4.8833, longitude: 23.3779, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "COD", name: "COD mixed 19 250 NM", latitude: -7.7917, longitude: 30.621, radiusNm: 250, priority: "HIGH" as const },
+  { iso3: "COD", name: "COD mixed 20 100 NM", latitude: 5.25, longitude: 14.489, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "COD", name: "COD mixed 21 50 NM", latitude: -4.7583, longitude: 17.789, radiusNm: 50, priority: "NORMAL" as const },
+  { iso3: "COD", name: "COD mixed 22 50 NM", latitude: 2.2083, longitude: 12.0747, radiusNm: 50, priority: "NORMAL" as const },
+  { iso3: "COD", name: "COD mixed 23 50 NM", latitude: 2.8417, longitude: 27.9477, radiusNm: 50, priority: "NORMAL" as const },
+  { iso3: "COD", name: "COD mixed 24 50 NM", latitude: -13.625, longitude: 31.1223, radiusNm: 50, priority: "NORMAL" as const },
+  { iso3: "COD", name: "COD mixed 25 50 NM", latitude: 5.375, longitude: 31.1223, radiusNm: 50, priority: "NORMAL" as const },
+  { iso3: "COD", name: "COD mixed 26 50 NM", latitude: -2.225, longitude: 20.3286, radiusNm: 50, priority: "NORMAL" as const },
+  { iso3: "MWI", name: "MWI mixed 01 250 NM", latitude: -14.6583, longitude: 35.3112, radiusNm: 250, priority: "NORMAL" as const },
+  { iso3: "MWI", name: "MWI mixed 02 100 NM", latitude: -9.85, longitude: 33.7445, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "MWI", name: "MWI mixed 03 50 NM", latitude: -9.725, longitude: 35.8249, radiusNm: 50, priority: "NORMAL" as const },
+  { iso3: "ERI", name: "ERI mixed 01 250 NM", latitude: 14.9417, longitude: 39.0344, radiusNm: 250, priority: "HIGH" as const },
+  { iso3: "ERI", name: "ERI mixed 02 50 NM", latitude: 12.9083, longitude: 42.8349, radiusNm: 50, priority: "NORMAL" as const },
+  { iso3: "ERI", name: "ERI mixed 03 50 NM", latitude: 17.975, longitude: 42.8349, radiusNm: 50, priority: "NORMAL" as const },
+  { iso3: "ERI", name: "ERI mixed 04 50 NM", latitude: 16.7083, longitude: 42.8349, radiusNm: 50, priority: "NORMAL" as const },
+  { iso3: "DJI", name: "DJI mixed 01 100 NM", latitude: 11.9167, longitude: 42.7388, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "MLI", name: "MLI mixed 01 250 NM", latitude: 15.8083, longitude: -6.313, radiusNm: 250, priority: "HIGH" as const },
+  { iso3: "MLI", name: "MLI mixed 02 250 NM", latitude: 22.1417, longitude: 0.3295, radiusNm: 250, priority: "HIGH" as const },
+  { iso3: "MLI", name: "MLI mixed 03 250 NM", latitude: 12.6417, longitude: 0.3295, radiusNm: 250, priority: "HIGH" as const },
+  { iso3: "MLI", name: "MLI mixed 04 250 NM", latitude: 22.1417, longitude: -9.6343, radiusNm: 250, priority: "HIGH" as const },
+  { iso3: "MLI", name: "MLI mixed 05 250 NM", latitude: 9.475, longitude: -9.6343, radiusNm: 250, priority: "HIGH" as const },
+  { iso3: "MLI", name: "MLI mixed 06 100 NM", latitude: 17.45, longitude: 3.3798, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "MLI", name: "MLI mixed 07 100 NM", latitude: 14.9167, longitude: -11.2337, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "MLI", name: "MLI mixed 08 100 NM", latitude: 23.7833, longitude: -4.5912, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "MLI", name: "MLI mixed 09 100 NM", latitude: 17.45, longitude: -0.6057, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "MLI", name: "MLI mixed 10 100 NM", latitude: 21.25, longitude: -4.5912, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "MLI", name: "MLI mixed 11 100 NM", latitude: 17.45, longitude: -11.2337, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "MLI", name: "MLI mixed 12 100 NM", latitude: 11.1167, longitude: -4.5912, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "MLI", name: "MLI mixed 13 100 NM", latitude: 18.7167, longitude: -3.2627, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "MLI", name: "MLI mixed 14 50 NM", latitude: 17.575, longitude: 1.5182, radiusNm: 50, priority: "NORMAL" as const },
+  { iso3: "MLI", name: "MLI mixed 15 50 NM", latitude: 15.675, longitude: 4.1752, radiusNm: 50, priority: "NORMAL" as const },
+  { iso3: "MLI", name: "MLI mixed 16 50 NM", latitude: 19.475, longitude: 4.1752, radiusNm: 50, priority: "NORMAL" as const },
+  { iso3: "MLI", name: "MLI mixed 17 50 NM", latitude: 24.5417, longitude: 4.1752, radiusNm: 50, priority: "NORMAL" as const },
+  { iso3: "MLI", name: "MLI mixed 18 50 NM", latitude: 9.975, longitude: 4.1752, radiusNm: 50, priority: "NORMAL" as const },
+  { iso3: "MLI", name: "MLI mixed 19 50 NM", latitude: 13.1417, longitude: -12.4311, radiusNm: 50, priority: "NORMAL" as const },
+  { iso3: "MLI", name: "MLI mixed 20 100 NM", latitude: 25.05, longitude: -4.5912, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "MLI", name: "MLI mixed 21 50 NM", latitude: 16.3083, longitude: 0.8539, radiusNm: 50, priority: "NORMAL" as const },
+  { iso3: "TCD", name: "TCD mixed 01 250 NM", latitude: 16.275, longitude: 19.3223, radiusNm: 250, priority: "HIGH" as const },
+  { iso3: "TCD", name: "TCD mixed 02 250 NM", latitude: 9.9417, longitude: 19.3223, radiusNm: 250, priority: "HIGH" as const },
+  { iso3: "TCD", name: "TCD mixed 03 250 NM", latitude: 22.6083, longitude: 19.3223, radiusNm: 250, priority: "HIGH" as const },
+  { iso3: "TCD", name: "TCD mixed 04 250 NM", latitude: 13.1083, longitude: 12.7516, radiusNm: 250, priority: "HIGH" as const },
+  { iso3: "TCD", name: "TCD mixed 05 100 NM", latitude: 19.8167, longitude: 14.4548, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "TCD", name: "TCD mixed 06 100 NM", latitude: 13.4833, longitude: 23.6539, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "TCD", name: "TCD mixed 07 100 NM", latitude: 19.8167, longitude: 23.6539, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "TCD", name: "TCD mixed 08 100 NM", latitude: 8.4167, longitude: 14.4548, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "TCD", name: "TCD mixed 09 100 NM", latitude: 22.35, longitude: 14.4548, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "TCD", name: "TCD mixed 10 100 NM", latitude: 17.2833, longitude: 14.4548, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "TCD", name: "TCD mixed 11 100 NM", latitude: 8.4167, longitude: 23.6539, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "TCD", name: "TCD mixed 12 100 NM", latitude: 17.2833, longitude: 23.6539, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "TCD", name: "TCD mixed 13 50 NM", latitude: 11.075, longitude: 23.7836, radiusNm: 50, priority: "NORMAL" as const },
+  { iso3: "TCD", name: "TCD mixed 14 100 NM", latitude: 22.35, longitude: 23.6539, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "TCD", name: "TCD mixed 15 50 NM", latitude: 15.5083, longitude: 23.7836, radiusNm: 50, priority: "NORMAL" as const },
+  { iso3: "TCD", name: "TCD mixed 16 50 NM", latitude: 18.675, longitude: 15.8986, radiusNm: 50, priority: "NORMAL" as const },
+  { iso3: "LSO", name: "LSO mixed 01 100 NM", latitude: -29.6833, longitude: 28.1693, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "SSD", name: "SSD mixed 01 250 NM", latitude: 9.2083, longitude: 29.7623, radiusNm: 250, priority: "HIGH" as const },
+  { iso3: "SSD", name: "SSD mixed 02 250 NM", latitude: 6.0417, longitude: 32.959, radiusNm: 250, priority: "HIGH" as const },
+  { iso3: "SSD", name: "SSD mixed 03 250 NM", latitude: 6.0417, longitude: 26.5657, radiusNm: 250, priority: "HIGH" as const },
+  { iso3: "SSD", name: "SSD mixed 04 100 NM", latitude: 10.85, longitude: 35.2555, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "SSD", name: "SSD mixed 05 100 NM", latitude: 10.85, longitude: 25.0263, radiusNm: 100, priority: "NORMAL" as const },
+  { iso3: "SSD", name: "SSD mixed 06 50 NM", latitude: 11.6083, longitude: 33.4637, radiusNm: 50, priority: "NORMAL" as const },
+  { iso3: "SSD", name: "SSD mixed 07 50 NM", latitude: 11.6083, longitude: 26.4311, radiusNm: 50, priority: "NORMAL" as const },
+  { iso3: "SSD", name: "SSD mixed 08 50 NM", latitude: 8.4417, longitude: 36.021, radiusNm: 50, priority: "NORMAL" as const }
 ];
 
 const referenceDataSyncConfigs = [
@@ -118,11 +203,24 @@ async function main(): Promise<void> {
     await prisma.provider.upsert({
       where: { code: provider.code },
       update: provider,
-      create: { ...provider, enabled: provider.code === "MOCK" }
+      create: { ...provider, enabled: false }
     });
   }
 
-  const allProviders = await prisma.provider.findMany();
+  await prisma.provider.updateMany({
+    where: { code: { notIn: activeProviderCodes } },
+    data: { enabled: false, integrationStatus: "PLANNED", notes: "Removed from active provider set. Kept only for historical database references." }
+  });
+  const inactiveProviders = await prisma.provider.findMany({ where: { code: { notIn: activeProviderCodes } }, select: { id: true } });
+  if (inactiveProviders.length > 0) {
+    await prisma.providerCountryConfig.updateMany({
+      where: { providerId: { in: inactiveProviders.map((provider) => provider.id) } },
+      data: { enabled: false, liveEnabled: false, historicalEnabled: false, notes: "Inactive legacy provider; hidden from collection UI." }
+    });
+  }
+
+  const allProviders = await prisma.provider.findMany({ where: { code: { in: activeProviderCodes } } });
+  const activeProviderIds = allProviders.map((provider) => provider.id);
   const allCountries = await prisma.country.findMany();
   for (const provider of allProviders) {
     for (const country of allCountries) {
@@ -132,10 +230,10 @@ async function main(): Promise<void> {
         create: {
           providerId: provider.id,
           countryId: country.id,
-          enabled: provider.code === "MOCK",
-          liveEnabled: provider.code === "MOCK",
-          historicalEnabled: provider.code === "MOCK",
-          livePollingIntervalSeconds: provider.code === "RAPID_SKYLINK" ? 900 : country.iso3 === "BDI" ? 60 : 300,
+          enabled: false,
+          liveEnabled: false,
+          historicalEnabled: false,
+          livePollingIntervalSeconds: defaultLivePollingIntervalSeconds,
           minPollingIntervalSeconds: 30,
           maxRequestsPerMinute: 1,
           maxRequestsPerHour: provider.code === "RAPID_SKYLINK" ? 4 : 60,
@@ -156,23 +254,64 @@ async function main(): Promise<void> {
     data: { maxRequestsPerHour: 60 }
   });
 
-  const adsbExchange = await prisma.provider.findUnique({ where: { code: "RAPID_ADSBEXCHANGE" } });
-  const libya = await prisma.country.findUnique({ where: { iso3: "LBY" } });
-  if (adsbExchange && libya) {
-    await prisma.providerCountryConfig.update({
-      where: { providerId_countryId: { providerId: adsbExchange.id, countryId: libya.id } },
+  await prisma.providerCountryConfig.updateMany({
+    where: { providerId: { in: activeProviderIds } },
+    data: { livePollingIntervalSeconds: defaultLivePollingIntervalSeconds }
+  });
+
+  const planeFinder = await prisma.provider.findUnique({ where: { code: "PLANE_FINDER" } });
+  if (planeFinder) {
+    await prisma.providerCountryConfig.updateMany({
+      where: { providerId: planeFinder.id },
       data: {
-        liveLatitude: 32.8872,
-        liveLongitude: 13.1913,
-        liveRadiusNm: 50,
-        notes: "ADSBexchange test point: Tripoli area, radius 50 NM."
+        livePollingIntervalSeconds: defaultLivePollingIntervalSeconds,
+        maxRequestsPerMinute: 1,
+        maxRequestsPerHour: 6,
+        maxRequestsPerDay: 144,
+        maxCreditsPerDay: 1440,
+        notes: `Plane Finder Growth default: standard live BBOX endpoint, 10 credits per request, ${defaultLivePollingIntervalSeconds} second polling for ${appEnvironment}. Enable per country/provider only after API key is configured.`
       }
     });
   }
 
+  const adsbExchange = await prisma.provider.findUnique({ where: { code: "RAPID_ADSBEXCHANGE" } });
   if (adsbExchange) {
+    const plannedCoverageNames = new Set(adsbExchangeCoverageAreas.map((coverageArea) => coverageArea.name));
+    const adsbCountries = await prisma.country.findMany({
+      where: { iso3: { in: [...new Set(adsbExchangeCoverageAreas.map((coverageArea) => coverageArea.iso3))] } }
+    });
+    const countryByIso3 = new Map(adsbCountries.map((country) => [country.iso3, country]));
+
+    await prisma.providerCoverageArea.updateMany({
+      where: {
+        providerId: adsbExchange.id,
+        name: { notIn: [...plannedCoverageNames] }
+      },
+      data: {
+        enabled: false,
+        notes: "Disabled by ADSBexchange mixed balanced coverage plan seed. Kept for audit/history only."
+      }
+    });
+
+    for (const country of adsbCountries) {
+      const requestCount = adsbExchangeCoverageAreas.filter((coverageArea) => coverageArea.iso3 === country.iso3).length;
+      await prisma.providerCountryConfig.update({
+        where: { providerId_countryId: { providerId: adsbExchange.id, countryId: country.id } },
+        data: {
+          livePollingIntervalSeconds: defaultLivePollingIntervalSeconds,
+          liveLatitude: null,
+          liveLongitude: null,
+          liveRadiusNm: null,
+          maxRequestsPerMinute: null,
+          maxRequestsPerHour: requestCount * 6,
+          maxRequestsPerDay: requestCount * 6 * 24,
+          notes: `ADSBexchange mixed balanced BBOX coverage plan: ${requestCount} radius requests every ${defaultLivePollingIntervalSeconds} seconds for ${appEnvironment}. DEV test first; PROD after approval.`
+        }
+      });
+    }
+
     for (const coverageArea of adsbExchangeCoverageAreas) {
-      const country = await prisma.country.findUnique({ where: { iso3: coverageArea.iso3 } });
+      const country = countryByIso3.get(coverageArea.iso3);
       if (!country) continue;
       await prisma.providerCoverageArea.upsert({
         where: {
@@ -188,7 +327,7 @@ async function main(): Promise<void> {
           longitude: coverageArea.longitude,
           radiusNm: coverageArea.radiusNm,
           priority: coverageArea.priority,
-          notes: "Initial coarse ANSP-airspace coverage candidate for ADSBexchange evaluation."
+          notes: "ADSBexchange mixed balanced BBOX coverage plan. Raw responses are stored per radius request; deduplication belongs to the downstream normalized/analytics layer."
         },
         create: {
           providerId: adsbExchange.id,
@@ -200,10 +339,24 @@ async function main(): Promise<void> {
           longitude: coverageArea.longitude,
           radiusNm: coverageArea.radiusNm,
           priority: coverageArea.priority,
-          notes: "Initial coarse ANSP-airspace coverage candidate for ADSBexchange evaluation."
+          notes: "ADSBexchange mixed balanced BBOX coverage plan. Raw responses are stored per radius request; deduplication belongs to the downstream normalized/analytics layer."
         }
       });
     }
+  }
+
+  await prisma.providerCountryConfig.updateMany({
+    where: { providerId: { in: activeProviderIds } },
+    data: { livePollingIntervalSeconds: defaultLivePollingIntervalSeconds }
+  });
+
+  if (activeProviderIds.length > 0) {
+    await prisma.$executeRaw`
+      UPDATE "ProviderCountryConfig"
+      SET "livePollingIntervalSeconds" = ${defaultLivePollingIntervalSeconds},
+          "updatedAt" = CURRENT_TIMESTAMP
+      WHERE "providerId" IN (${Prisma.join(activeProviderIds)})
+    `;
   }
 
   await prisma.alertRule.upsert({

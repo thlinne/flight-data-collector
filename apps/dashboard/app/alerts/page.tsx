@@ -30,7 +30,7 @@ export default async function AlertsPage() {
       <h2>Alert history</h2>
       <table className="table">
         <thead><tr><th>Status</th><th>Severity</th><th>Type</th><th>Message</th><th>Related</th><th>Actions</th></tr></thead>
-        <tbody>{alerts.map((alert) => <tr key={alert.id}><td className={alert.status === "OPEN" ? "status-open" : ""}>{alert.status}</td><td className={alert.severity === "WARNING" ? "status-warning" : ""}>{alert.severity}</td><td>{alert.alertRule.alertType}</td><td>{alert.message}</td><td>{alert.provider ? <a href={`/providers/${alert.provider.id}`}>{alert.provider.name}</a> : null} {alert.country ? <a href={`/countries/${alert.country.id}`}>{alert.country.name}</a> : null} <a href="/raw">Raw window</a></td><td><form action={acknowledge}><input type="hidden" name="id" value={alert.id} /><button className="button secondary">Acknowledge</button></form><form action={resolveAlert}><input type="hidden" name="id" value={alert.id} /><button className="button">Resolve</button></form></td></tr>)}</tbody>
+        <tbody>{alerts.map((alert) => <tr key={alert.id}><td className={alert.status === "OPEN" ? "status-open" : ""}>{alert.status}</td><td className={alert.severity === "WARNING" ? "status-warning" : ""}>{alert.severity}</td><td>{alert.alertRule.alertType}</td><td>{alert.message}</td><td>{alert.provider?.name ?? null} {alert.country?.name ?? null} <a href="/raw">Raw window</a></td><td><form action={acknowledge}><input type="hidden" name="id" value={alert.id} /><button className="button secondary">Acknowledge</button></form><form action={resolveAlert}><input type="hidden" name="id" value={alert.id} /><button className="button">Resolve</button></form></td></tr>)}</tbody>
       </table>
     </>
   );

@@ -1,11 +1,4 @@
-import { revalidatePath } from "next/cache";
-import { apiGet, apiPost } from "../api";
-
-async function cleanupMockData() {
-  "use server";
-  await apiPost("/admin/cleanup/mock-data", {});
-  revalidatePath("/raw");
-}
+import { apiGet } from "../api";
 
 export default async function RawPage({
   searchParams
@@ -38,9 +31,6 @@ export default async function RawPage({
         <input name="callsign" placeholder="Callsign" defaultValue={searchParams?.callsign ?? ""} />
         <button className="button">Apply filters</button>
         <a className="button secondary" href="/raw">Clear</a>
-      </form>
-      <form className="toolbar" action={cleanupMockData}>
-        <button className="button secondary">Delete all Mock data</button>
       </form>
       <table className="table">
         <thead><tr><th>Observed</th><th>Provider</th><th>Country</th><th>ICAO24</th><th>Callsign</th><th>Raw JSON</th></tr></thead>

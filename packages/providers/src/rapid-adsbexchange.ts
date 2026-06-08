@@ -141,6 +141,8 @@ export class RapidAdsbExchangeProviderAdapter implements FlightDataProviderAdapt
         radiusNm: center.radiusNm,
         bbox: input.bbox
       },
+      httpStatus: response.status,
+      responseByteSize: Buffer.byteLength(responseText),
       receivedAt: new Date(),
       rawPayload,
       records,

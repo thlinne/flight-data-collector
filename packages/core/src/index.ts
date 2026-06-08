@@ -40,6 +40,8 @@ export interface ProviderFetchResult {
   providerCode: string;
   endpoint: string;
   requestParams: Record<string, unknown>;
+  httpStatus?: number;
+  responseByteSize?: number;
   receivedAt: Date;
   rawPayload: unknown;
   records: ProviderNormalizedRecord[];

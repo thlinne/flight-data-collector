@@ -4,7 +4,6 @@ import { Queue } from "bullmq";
 import Fastify from "fastify";
 import { z } from "zod";
 import { prisma } from "@flight-data-collector/db";
-import type { TransactionClient } from "@flight-data-collector/db";
 
 const app = Fastify({ logger: true });
 const redisUrl = new URL(process.env.REDIS_URL ?? "redis://localhost:6379");
@@ -14,6 +13,7 @@ const redisConnection = {
   maxRetriesPerRequest: null
 };
 const collectionQueue = new Queue("collection", { connection: redisConnection });
+const activeProviderCodes = ["PLANE_FINDER", "RAPID_ADSBEXCHANGE", "RAPID_FLIGHT_RADAR", "RAPID_SKYLINK"];
 
 await app.register(cors, { origin: true });
 
@@ -37,6 +37,7 @@ app.get("/overview", async () => {
   const now = new Date();
   const day = new Date(now);
   day.setUTCHours(0, 0, 0, 0);
+  const yesterday = new Date(day.getTime() - 24 * 60 * 60 * 1000);
   const week = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const month = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const [today, thisWeek, thisMonth, activeCountries, activeProviders, failedLast24h, openCritical] = await Promise.all([
@@ -44,7 +45,7 @@ app.get("/overview", async () => {
     prisma.rawFlightObservation.count({ where: { observedAt: { gte: week } } }),
     prisma.rawFlightObservation.count({ where: { observedAt: { gte: month } } }),
     prisma.country.count({ where: { enabled: true } }),
-    prisma.provider.count({ where: { enabled: true } }),
+    prisma.provider.count({ where: { enabled: true, code: { in: activeProviderCodes } } }),
     prisma.providerFetchRun.count({ where: { success: false, startedAt: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) } } }),
     prisma.alertEvent.count({ where: { status: "OPEN", severity: "CRITICAL" } })
   ]);
@@ -53,7 +54,7 @@ app.get("/overview", async () => {
     prisma.providerCountryConfig.findMany({
       where: {
         provider: {
-          code: { not: "MOCK" },
+          code: { in: activeProviderCodes },
           integrationStatus: { in: ["IMPLEMENTED", "TESTING", "WORKING"] }
         }
       },
@@ -69,12 +70,22 @@ app.get("/overview", async () => {
         orderBy: { startedAt: "desc" }
       });
       const countryWhere = { countryTags: { some: { countryId: config.countryId } } };
-      const [observationsToday, observationsThisMonth, flightsToday, flightsThisMonth, lastRunFlights] = await Promise.all([
+      const [observationsYesterday, observationsToday, observationsThisMonth, flightsYesterday, flightsToday, flightsThisMonth, lastRunFlights] = await Promise.all([
+        prisma.rawFlightObservation.count({
+          where: { providerId: config.providerId, observedAt: { gte: yesterday, lt: day }, ...countryWhere }
+        }),
         prisma.rawFlightObservation.count({
           where: { providerId: config.providerId, observedAt: { gte: day }, ...countryWhere }
         }),
         prisma.rawFlightObservation.count({
           where: { providerId: config.providerId, observedAt: { gte: month }, ...countryWhere }
+        }),
+        prisma.providerDetectedFlightCountry.count({
+          where: {
+            countryId: config.countryId,
+            lastObservedAt: { gte: yesterday, lt: day },
+            detectedFlight: { providerId: config.providerId }
+          }
         }),
         prisma.providerDetectedFlightCountry.count({
           where: {
@@ -136,8 +147,10 @@ app.get("/overview", async () => {
         lastRunSuccess: lastRun?.success ?? null,
         lastRunRecords: lastRun?.recordCount ?? null,
         lastRunFlights,
+        observationsYesterday,
         observationsToday,
         observationsThisMonth,
+        flightsYesterday,
         flightsToday,
         flightsThisMonth
       };
@@ -148,7 +161,12 @@ app.get("/overview", async () => {
 });
 
 app.get("/countries", async () => prisma.country.findMany({ include: { collectionAreas: true }, orderBy: { name: "asc" } }));
-app.get("/providers", async () => prisma.provider.findMany({ orderBy: { name: "asc" } }));
+app.get("/providers", async () =>
+  prisma.provider.findMany({
+    where: { code: { in: activeProviderCodes } },
+    orderBy: { name: "asc" }
+  })
+);
 
 app.patch("/countries/:id", async (request, reply) => {
   const params = z.object({ id: z.string() }).parse(request.params);
@@ -164,6 +182,7 @@ app.patch("/providers/:id", async (request, reply) => {
 
 app.get("/configs", async () =>
   prisma.providerCountryConfig.findMany({
+    where: { provider: { code: { in: activeProviderCodes } } },
     include: { provider: true, country: true },
     orderBy: [{ country: { name: "asc" } }, { provider: { name: "asc" } }]
   })
@@ -254,53 +273,6 @@ app.patch("/configs/provider/:providerId", async (request, reply) => {
   const data = configUpdateSchema.parse(request.body);
   const result = await prisma.providerCountryConfig.updateMany({ where: { providerId: params.providerId }, data });
   return reply.send({ updated: result.count });
-});
-
-app.get("/country/:id", async (request) => {
-  const { id } = z.object({ id: z.string() }).parse(request.params);
-  const country = await prisma.country.findUnique({ where: { id }, include: { collectionAreas: true, providerCountryConfigs: { include: { provider: true } } } });
-  const observations = await prisma.rawFlightObservation.count({ where: { countryTags: { some: { countryId: id } } } });
-  const lastObservation = await prisma.rawFlightObservation.findFirst({ where: { countryTags: { some: { countryId: id } } }, orderBy: { observedAt: "desc" } });
-  return { country, observations, lastObservation };
-});
-
-app.get("/provider/:id", async (request) => {
-  const { id } = z.object({ id: z.string() }).parse(request.params);
-  const now = new Date();
-  const today = new Date(now);
-  today.setUTCHours(0, 0, 0, 0);
-  const month = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  const provider = await prisma.provider.findUnique({ where: { id }, include: { providerCountryConfigs: { include: { country: true } } } });
-  const [runs, failedRuns, lastErrors, requestsToday, failedToday, recordsToday, requestsThisMonth, failedThisMonth, recordsThisMonth, bytesThisMonth] = await Promise.all([
-    prisma.providerFetchRun.count({ where: { providerId: id } }),
-    prisma.providerFetchRun.count({ where: { providerId: id, success: false } }),
-    prisma.providerFetchRun.findMany({ where: { providerId: id, success: false }, orderBy: { startedAt: "desc" }, take: 10 }),
-    prisma.providerFetchRun.count({ where: { providerId: id, startedAt: { gte: today } } }),
-    prisma.providerFetchRun.count({ where: { providerId: id, success: false, startedAt: { gte: today } } }),
-    prisma.providerFetchRun.aggregate({ where: { providerId: id, startedAt: { gte: today } }, _sum: { recordCount: true } }),
-    prisma.providerFetchRun.count({ where: { providerId: id, startedAt: { gte: month } } }),
-    prisma.providerFetchRun.count({ where: { providerId: id, success: false, startedAt: { gte: month } } }),
-    prisma.providerFetchRun.aggregate({ where: { providerId: id, startedAt: { gte: month } }, _sum: { recordCount: true } }),
-    prisma.rawProviderResponse.aggregate({ where: { providerId: id, receivedAt: { gte: month } }, _sum: { byteSize: true } })
-  ]);
-  return {
-    provider,
-    runs,
-    failedRuns,
-    successRate: runs === 0 ? null : (runs - failedRuns) / runs,
-    lastErrors,
-    usage: {
-      requestsToday,
-      failedToday,
-      successfulToday: requestsToday - failedToday,
-      recordsToday: recordsToday._sum.recordCount ?? 0,
-      requestsThisMonth,
-      failedThisMonth,
-      successfulThisMonth: requestsThisMonth - failedThisMonth,
-      recordsThisMonth: recordsThisMonth._sum.recordCount ?? 0,
-      bytesThisMonth: bytesThisMonth._sum.byteSize ?? 0
-    }
-  };
 });
 
 app.get("/raw", async (request) => {
@@ -493,6 +465,19 @@ app.post("/manual-test-fetch", async (request) => {
   return { queued: true, jobId: job.id };
 });
 
+app.post("/historical-snapshot", async (request) => {
+  const body = z
+    .object({
+      providerId: z.string(),
+      countryId: z.string(),
+      collectionAreaId: z.string().optional(),
+      timestamp: z.string().datetime()
+    })
+    .parse(request.body);
+  const job = await collectionQueue.add("historical-snapshot", body, { attempts: 1 });
+  return { queued: true, jobId: job.id };
+});
+
 app.post("/historical-backfill", async (request) => {
   const body = z
     .object({
@@ -506,41 +491,6 @@ app.post("/historical-backfill", async (request) => {
     .parse(request.body);
   const job = await collectionQueue.add("historical-backfill", body, { attempts: 3, backoff: { type: "exponential", delay: 1000 } });
   return { queued: true, jobId: job.id };
-});
-
-app.post("/admin/cleanup/mock-data", async (_request, reply) => {
-  const provider = await prisma.provider.findUnique({ where: { code: "MOCK" } });
-  if (!provider) return reply.send({ deleted: 0 });
-
-  const result = await prisma.$transaction(async (tx: TransactionClient) => {
-    const observations = await tx.rawFlightObservation.findMany({
-      where: { providerId: provider.id },
-      select: { id: true }
-    });
-    const observationIds = observations.map((observation: { id: string }) => observation.id);
-
-    const fetchRuns = await tx.providerFetchRun.findMany({
-      where: { providerId: provider.id },
-      select: { id: true }
-    });
-    const fetchRunIds = fetchRuns.map((run: { id: string }) => run.id);
-
-    await tx.countryObservationTag.deleteMany({ where: { rawFlightObservationId: { in: observationIds } } });
-    await tx.flightObservationLink.deleteMany({ where: { rawFlightObservationId: { in: observationIds } } });
-    const deletedObservations = await tx.rawFlightObservation.deleteMany({ where: { id: { in: observationIds } } });
-    const deletedResponses = await tx.rawProviderResponse.deleteMany({ where: { providerId: provider.id } });
-    const deletedFetchRuns = await tx.providerFetchRun.deleteMany({ where: { id: { in: fetchRunIds } } });
-    await tx.alertEvent.deleteMany({ where: { providerId: provider.id } });
-    await tx.providerDailyMetric.deleteMany({ where: { providerId: provider.id } });
-
-    return {
-      observations: deletedObservations.count,
-      rawResponses: deletedResponses.count,
-      fetchRuns: deletedFetchRuns.count
-    };
-  });
-
-  return reply.send(result);
 });
 
 const port = Number(process.env.API_PORT ?? 4000);

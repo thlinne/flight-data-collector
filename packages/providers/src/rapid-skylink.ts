@@ -84,7 +84,7 @@ export class RapidSkyLinkProviderAdapter implements FlightDataProviderAdapter {
 
     const url = new URL(`https://${host}${endpoint}`);
     url.searchParams.set("photos", "false");
-    url.searchParams.set("offset", "0");
+    url.searchParams.set("bbox", `${input.bbox.south},${input.bbox.west},${input.bbox.north},${input.bbox.east}`);
 
     const response = await fetch(url, {
       headers: {
@@ -122,9 +122,9 @@ export class RapidSkyLinkProviderAdapter implements FlightDataProviderAdapter {
       endpoint: url.origin + url.pathname,
       requestParams: {
         photos: false,
-        offset: 0,
-        bbox: input.bbox,
-        globalSnapshotFilteredToBbox: true
+        bbox: `${input.bbox.south},${input.bbox.west},${input.bbox.north},${input.bbox.east}`,
+        bboxObject: input.bbox,
+        serverSideBboxFilter: true
       },
       receivedAt: new Date(),
       rawPayload,

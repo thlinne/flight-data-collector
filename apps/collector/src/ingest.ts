@@ -48,22 +48,14 @@ function identityKey(record: ProviderFetchResult["records"][number]): string | n
 async function storeObservedIdentity(tx: TransactionClient, providerId: string, record: ProviderFetchResult["records"][number]): Promise<void> {
   const key = identityKey(record);
   if (!key) return;
-  const existing = await tx.observedAircraftIdentity.findUnique({
-    where: { providerId_identityKey: { providerId, identityKey: key } }
-  });
-  if (existing) {
-    await tx.observedAircraftIdentity.update({
-      where: { id: existing.id },
-      data: {
-        lastObservedAt: record.observedAt,
-        observationCount: { increment: 1 },
-        rawExamplesJson: toJsonValue(record.rawRecord)
-      }
-    });
-    return;
-  }
-  await tx.observedAircraftIdentity.create({
-    data: {
+  await tx.observedAircraftIdentity.upsert({
+    where: { providerId_identityKey: { providerId, identityKey: key } },
+    update: {
+      lastObservedAt: record.observedAt,
+      observationCount: { increment: 1 },
+      rawExamplesJson: toJsonValue(record.rawRecord)
+    },
+    create: {
       providerId,
       identityKey: key,
       icao24: record.icao24,
@@ -234,7 +226,7 @@ export async function storeFetchResult(input: {
         startedAt: input.startedAt,
         finishedAt,
         durationMs: finishedAt.getTime() - input.startedAt.getTime(),
-        httpStatus: 200,
+        httpStatus: input.result.httpStatus ?? 200,
         success: true,
         responseHash: payloadHash,
         recordCount: input.result.records.length

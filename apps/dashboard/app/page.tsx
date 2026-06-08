@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { apiGet } from "./api";
 
-type OverviewMode = "last" | "today" | "month";
+type OverviewMode = "last" | "yesterday" | "today" | "month";
 
 type MatrixCell = {
   id: string;
@@ -17,20 +17,24 @@ type MatrixCell = {
   lastRunSuccess: boolean | null;
   lastRunRecords: number | null;
   lastRunFlights: number | null;
+  observationsYesterday: number;
   observationsToday: number;
   observationsThisMonth: number;
+  flightsYesterday: number;
   flightsToday: number;
   flightsThisMonth: number;
 };
 
 function modeValue(cell: MatrixCell, mode: OverviewMode): string {
   if (mode === "last") return cell.lastRunRecords == null ? "-" : String(cell.lastRunRecords);
+  if (mode === "yesterday") return String(cell.observationsYesterday);
   if (mode === "today") return String(cell.observationsToday);
   return String(cell.observationsThisMonth);
 }
 
 function flightModeValue(cell: MatrixCell, mode: OverviewMode): string {
   if (mode === "last") return cell.lastRunFlights == null ? "-" : String(cell.lastRunFlights);
+  if (mode === "yesterday") return String(cell.flightsYesterday);
   if (mode === "today") return String(cell.flightsToday);
   return String(cell.flightsThisMonth);
 }
@@ -38,10 +42,12 @@ function flightModeValue(cell: MatrixCell, mode: OverviewMode): string {
 function numericModeValue(cell: MatrixCell, mode: OverviewMode, kind: "observations" | "flights"): number | null {
   if (kind === "flights") {
     if (mode === "last") return cell.lastRunFlights;
+    if (mode === "yesterday") return cell.flightsYesterday;
     if (mode === "today") return cell.flightsToday;
     return cell.flightsThisMonth;
   }
   if (mode === "last") return cell.lastRunRecords;
+  if (mode === "yesterday") return cell.observationsYesterday;
   if (mode === "today") return cell.observationsToday;
   return cell.observationsThisMonth;
 }
@@ -62,14 +68,15 @@ function cellStatus(cell: MatrixCell, mode: OverviewMode, kind: "observations" |
     return { label: "WAIT", className: "matrix-status is-empty", title: "No fetch run yet" };
   }
   if (value === 0) {
-    const period = mode === "last" ? "last run" : mode === "today" ? "today" : "this month";
+    const period = mode === "last" ? "last run" : mode === "yesterday" ? "yesterday" : mode === "today" ? "today" : "this month";
     return { label: "NO DATA", className: "matrix-status is-empty", title: `Active, but no ${kind === "flights" ? "flights" : "records"} for ${period}` };
   }
   return { label: "ON", className: "matrix-status is-on", title: "Active" };
 }
 
 export default async function OverviewPage({ searchParams }: { searchParams?: { mode?: string } }) {
-  const mode: OverviewMode = searchParams?.mode === "today" || searchParams?.mode === "month" ? searchParams.mode : "last";
+  const mode: OverviewMode =
+    searchParams?.mode === "yesterday" || searchParams?.mode === "today" || searchParams?.mode === "month" ? searchParams.mode : "last";
   const data = await apiGet<{
     today: number;
     thisWeek: number;
@@ -112,6 +119,7 @@ export default async function OverviewPage({ searchParams }: { searchParams?: { 
         <h2>Data point matrix</h2>
         <div className="segmented-control">
           <Link className={mode === "last" ? "active" : ""} href="/?mode=last">Last run</Link>
+          <Link className={mode === "yesterday" ? "active" : ""} href="/?mode=yesterday">Yesterday</Link>
           <Link className={mode === "today" ? "active" : ""} href="/?mode=today">Today</Link>
           <Link className={mode === "month" ? "active" : ""} href="/?mode=month">This month</Link>
         </div>
