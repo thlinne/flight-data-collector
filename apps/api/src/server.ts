@@ -435,28 +435,49 @@ app.get("/admin/database-backup.sql", async (_request, reply) => {
     stdio: ["ignore", "pipe", "pipe"]
   });
 
-  const chunks: Buffer[] = [];
   const errors: Buffer[] = [];
-  dump.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
-  dump.stderr.on("data", (chunk: Buffer) => errors.push(chunk));
-
-  const exitCode = await new Promise<number | null>((resolve, reject) => {
-    dump.on("error", reject);
-    dump.on("close", resolve);
+  let errorBytes = 0;
+  let completed = false;
+  dump.stderr.on("data", (chunk: Buffer) => {
+    if (errorBytes < 64 * 1024) {
+      errors.push(chunk);
+      errorBytes += chunk.length;
+    }
   });
 
-  const sql = Buffer.concat(chunks);
-  if (exitCode !== 0 || sql.length === 0) {
+  dump.on("error", (error) => {
+    dump.stdout.destroy(error);
+  });
+  dump.on("close", (exitCode) => {
+    completed = true;
+    if (exitCode !== 0) {
+      const errorText = Buffer.concat(errors).toString("utf8").trim();
+      app.log.error({ exitCode, errorText }, "pg_dump backup stream failed");
+    }
+  });
+  reply.raw.on("close", () => {
+    if (!completed) dump.kill("SIGTERM");
+  });
+
+  const firstChunk = await new Promise<Buffer | null>((resolve, reject) => {
+    dump.stdout.once("data", (chunk: Buffer) => resolve(chunk));
+    dump.stdout.once("end", () => resolve(null));
+    dump.stdout.once("error", reject);
+    dump.once("error", reject);
+  });
+
+  if (!firstChunk) {
     const errorText = Buffer.concat(errors).toString("utf8").trim();
     return reply.code(500).send({
-      error: errorText || `pg_dump exited with code ${exitCode ?? "unknown"} and produced an empty backup`
+      error: errorText || "pg_dump produced an empty backup"
     });
   }
 
+  dump.stdout.unshift(firstChunk);
   return reply
     .header("Content-Type", "application/sql; charset=utf-8")
     .header("Content-Disposition", `attachment; filename="${filename}"`)
-    .send(sql);
+    .send(dump.stdout);
 });
 
 app.post("/manual-test-fetch", async (request) => {
