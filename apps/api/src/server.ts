@@ -16,6 +16,23 @@ const redisConnection = {
 };
 const collectionQueue = new Queue("collection", { connection: redisConnection });
 const activeProviderCodes = ["PLANE_FINDER", "RAPID_ADSBEXCHANGE", "RAPID_FLIGHT_RADAR", "RAPID_SKYLINK"];
+const overviewMatrixConcurrency = 2;
+
+async function mapWithConcurrency<T, R>(items: T[], concurrency: number, mapper: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = [];
+  let nextIndex = 0;
+
+  async function worker(): Promise<void> {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await mapper(items[index]);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
+  return results;
+}
 
 await app.register(cors, { origin: true });
 
@@ -65,8 +82,7 @@ app.get("/overview", async () => {
     })
   ]);
 
-  const matrixRows = await Promise.all(
-    configs.map(async (config: (typeof configs)[number]) => {
+  const matrixRows = await mapWithConcurrency(configs, overviewMatrixConcurrency, async (config: (typeof configs)[number]) => {
       const lastRun = await prisma.providerFetchRun.findFirst({
         where: { providerId: config.providerId, countryId: config.countryId },
         orderBy: { startedAt: "desc" }
@@ -156,8 +172,7 @@ app.get("/overview", async () => {
         flightsToday,
         flightsThisMonth
       };
-    })
-  );
+    });
 
   return { today, thisWeek, thisMonth, activeCountries, activeProviders, failedLast24h, openCritical, countries, matrixRows };
 });
