@@ -22,6 +22,7 @@ type R2Enrichment = {
   errorMessage: string | null;
   selectedCandidate: JsonInput | null;
   candidateCount: number;
+  requestedInThisRun: boolean;
 };
 
 type R2Flight = {
@@ -277,7 +278,8 @@ async function enrichWithGoogleFlights(input: EnrichmentInput): Promise<R2Enrich
       completedAt: existing.completedAt?.toISOString() ?? null,
       errorMessage: existing.errorMessage,
       selectedCandidate: (existing.selectedCandidateJson as JsonInput | null) ?? null,
-      candidateCount: existing.candidateCount
+      candidateCount: existing.candidateCount,
+      requestedInThisRun: false
     };
   }
 
@@ -321,7 +323,8 @@ async function enrichWithGoogleFlights(input: EnrichmentInput): Promise<R2Enrich
       completedAt: created.completedAt?.toISOString() ?? null,
       errorMessage: created.errorMessage,
       selectedCandidate: null,
-      candidateCount: 0
+      candidateCount: 0,
+      requestedInThisRun: false
     };
   }
 
@@ -354,7 +357,8 @@ async function enrichWithGoogleFlights(input: EnrichmentInput): Promise<R2Enrich
       completedAt: created.completedAt?.toISOString() ?? null,
       errorMessage: created.errorMessage,
       selectedCandidate: null,
-      candidateCount: 0
+      candidateCount: 0,
+      requestedInThisRun: false
     };
   }
 
@@ -413,7 +417,8 @@ async function enrichWithGoogleFlights(input: EnrichmentInput): Promise<R2Enrich
       completedAt: created.completedAt?.toISOString() ?? null,
       errorMessage: created.errorMessage,
       selectedCandidate: (created.selectedCandidateJson as JsonInput | null) ?? null,
-      candidateCount: created.candidateCount
+      candidateCount: created.candidateCount,
+      requestedInThisRun: true
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -445,13 +450,18 @@ async function enrichWithGoogleFlights(input: EnrichmentInput): Promise<R2Enrich
       completedAt: created.completedAt?.toISOString() ?? null,
       errorMessage: created.errorMessage,
       selectedCandidate: null,
-      candidateCount: 0
+      candidateCount: 0,
+      requestedInThisRun: true
     };
   }
 }
 
 function firstNonEmpty(values: Array<string | null | undefined>): string | null {
   return values.map(normalizeCode).find((value): value is string => Boolean(value)) ?? null;
+}
+
+function sleep(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 export async function buildR2Report(query: unknown): Promise<R2Report> {
@@ -531,7 +541,12 @@ export async function buildR2Report(query: unknown): Promise<R2Report> {
           originAirportCode: observedOriginAirportCode,
           destinationAirportCode: observedDestinationAirportCode
         });
-        if (enrichment?.requestedAt) createdRequests += 1;
+        if (enrichment?.requestedInThisRun) {
+          createdRequests += 1;
+          if (createdRequests % 5 === 0 && createdRequests < maxEnrichmentRequests) {
+            await sleep(1000);
+          }
+        }
       }
     }
 
@@ -585,6 +600,7 @@ export async function buildR2Report(query: unknown): Promise<R2Report> {
       "Google Flights data is used only as commercial itinerary enrichment, never as observed position evidence.",
       "Google Flights enrichment is requested only for report flights with enough usable identity and route information.",
       "Every Google Flights enrichment attempt is persisted and reused by query key to reduce repeated API spend.",
+      "Google Flights requests are rate-limited to batches of five requests followed by a one-second pause.",
       "If enrichment is missing or failed, the observed flight remains valid as provider evidence but has no itinerary candidate.",
       "Provider data remains separated; no cross-provider deduplication is performed in this report."
     ]

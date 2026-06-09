@@ -38,8 +38,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                   <FileText size={16} /> Reports
                 </a>
                 <div className="nav-flyout">
-                  <a href="/reports#r1">R1 Daily Overview</a>
-                  <a href="/reports#r2">R2 Daily Detail</a>
+                  <a href="/reports/r1">R1 Daily Overview</a>
+                  <a href="/reports/r2">R2 Daily Detail</a>
                 </div>
               </div>
               {links.slice(5).map(([href, label, Icon]) => (
