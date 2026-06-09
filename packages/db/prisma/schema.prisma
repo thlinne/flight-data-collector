@@ -108,6 +108,18 @@ enum DetectedFlightGroupingMethod {
   CALLSIGN
 }
 
+enum FlightEnrichmentSource {
+  GOOGLE_FLIGHTS_RAPIDAPI
+}
+
+enum FlightEnrichmentStatus {
+  PENDING
+  SUCCESS
+  NO_QUERY_POSSIBLE
+  NO_MATCH
+  FAILED
+}
+
 model Provider {
   id                       String                  @id @default(cuid())
   code                     String                  @unique
@@ -335,6 +347,7 @@ model ProviderDetectedFlight {
   provider               Provider                       @relation(fields: [providerId], references: [id])
   observations           RawFlightObservation[]
   countries              ProviderDetectedFlightCountry[]
+  enrichmentQueries      FlightEnrichmentQuery[]
 
   @@unique([providerId, flightKey])
   @@index([providerId, groupingKey])
@@ -342,6 +355,68 @@ model ProviderDetectedFlight {
   @@index([providerId, lastObservedAt])
   @@index([icao24])
   @@index([callsign])
+}
+
+model FlightEnrichmentQuery {
+  id                         String                 @id @default(cuid())
+  detectedFlightId           String
+  source                     FlightEnrichmentSource
+  status                     FlightEnrichmentStatus @default(PENDING)
+  queryKey                   String                 @unique
+  reportDate                 DateTime
+  callsign                   String?
+  parsedAirlineCode          String?
+  parsedFlightNumber         String?
+  originAirportCode          String?
+  destinationAirportCode     String?
+  outboundDate               String?
+  endpoint                   String?
+  requestParamsJson          Json
+  requestedAt                DateTime?
+  completedAt                DateTime?
+  httpStatus                 Int?
+  errorMessage               String?
+  rawResponseJson            Json?
+  selectedCandidateJson      Json?
+  candidateCount             Int                    @default(0)
+  notes                      String?
+  createdAt                  DateTime               @default(now())
+  updatedAt                  DateTime               @updatedAt
+  detectedFlight             ProviderDetectedFlight @relation(fields: [detectedFlightId], references: [id])
+  candidates                 GoogleFlightsItineraryCandidate[]
+
+  @@index([detectedFlightId, source])
+  @@index([source, status])
+  @@index([reportDate])
+}
+
+model GoogleFlightsItineraryCandidate {
+  id                         String                @id @default(cuid())
+  enrichmentQueryId          String
+  rank                       Int
+  price                      Float?
+  airlineCode                String?
+  airlineNamesJson           Json?
+  departureAirportCode       String?
+  departureAirportName       String?
+  arrivalAirportCode         String?
+  arrivalAirportName         String?
+  departureDate              String?
+  departureTime              String?
+  arrivalDate                String?
+  arrivalTime                String?
+  durationMinutes            Int?
+  stops                      Int?
+  aircraftName               String?
+  flightNumbersJson          Json?
+  detailToken                String?
+  isAvailable                Boolean?
+  rawCandidateJson           Json
+  createdAt                  DateTime              @default(now())
+  enrichmentQuery            FlightEnrichmentQuery @relation(fields: [enrichmentQueryId], references: [id])
+
+  @@index([enrichmentQueryId, rank])
+  @@index([departureAirportCode, arrivalAirportCode])
 }
 
 model ProviderDetectedFlightCountry {

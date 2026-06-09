@@ -4,7 +4,8 @@ import { Queue } from "bullmq";
 import Fastify from "fastify";
 import { z } from "zod";
 import { prisma } from "@flight-data-collector/db";
-import { buildR1Pdf, buildR1Report, buildR1Xlsx, sendReportFile } from "./report-r1.js";
+import { buildR1Pdf, buildR1Report, buildR1Xlsx, sendReportFile as sendR1ReportFile } from "./report-r1.js";
+import { buildR2Pdf, buildR2Report, buildR2Xlsx, sendReportFile as sendR2ReportFile } from "./report-r2.js";
 
 const app = Fastify({ logger: true });
 const redisUrl = new URL(process.env.REDIS_URL ?? "redis://localhost:6379");
@@ -165,16 +166,33 @@ app.get("/reports/r1", async (request) => buildR1Report(request.query));
 
 app.get("/reports/r1.pdf", async (request, reply) => {
   const report = await buildR1Report(request.query);
-  return sendReportFile(reply, buildR1Pdf(report), "application/pdf", `r1-one-day-overview-${report.provider.code}-${report.date}.pdf`);
+  return sendR1ReportFile(reply, buildR1Pdf(report), "application/pdf", `r1-one-day-overview-${report.provider.code}-${report.date}.pdf`);
 });
 
 app.get("/reports/r1.xlsx", async (request, reply) => {
   const report = await buildR1Report(request.query);
-  return sendReportFile(
+  return sendR1ReportFile(
     reply,
     buildR1Xlsx(report),
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     `r1-one-day-overview-${report.provider.code}-${report.date}.xlsx`
+  );
+});
+
+app.get("/reports/r2", async (request) => buildR2Report(request.query));
+
+app.get("/reports/r2.pdf", async (request, reply) => {
+  const report = await buildR2Report(request.query);
+  return sendR2ReportFile(reply, buildR2Pdf(report), "application/pdf", `r2-one-day-detail-${report.provider.code}-${report.country.iso3}-${report.date}.pdf`);
+});
+
+app.get("/reports/r2.xlsx", async (request, reply) => {
+  const report = await buildR2Report(request.query);
+  return sendR2ReportFile(
+    reply,
+    buildR2Xlsx(report),
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    `r2-one-day-detail-${report.provider.code}-${report.country.iso3}-${report.date}.xlsx`
   );
 });
 
