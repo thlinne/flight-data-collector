@@ -52,6 +52,16 @@ Flights:
 - `GET /flights/search-one-way`
 - `GET /flights/get-booking-results`
 
+Observed request parameter names for `GET /flights/search-one-way`:
+
+- `departureId`
+- `arrivalId`
+- `departureDate`
+- optional: `flightNumber`
+- optional/context: `adults`, `currency`, `languageCode`, `countryCode`
+
+Important implementation note: the endpoint rejected snake_case parameters such as `departure_id`, `arrival_id`, and `outbound_date` with validation errors. Use camelCase request parameters.
+
 Date grid:
 
 - `GET /date-grid/for-roundtrip`

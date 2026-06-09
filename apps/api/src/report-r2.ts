@@ -281,14 +281,14 @@ async function enrichWithGoogleFlights(input: EnrichmentInput): Promise<R2Enrich
 
   const endpoint = process.env.GOOGLE_FLIGHTS_SEARCH_ONE_WAY_ENDPOINT ?? "/flights/search-one-way";
   const requestParams = {
-    departure_id: originAirportCode,
-    arrival_id: destinationAirportCode,
-    outbound_date: outboundDate,
+    departureId: originAirportCode,
+    arrivalId: destinationAirportCode,
+    departureDate: outboundDate,
     adults: "1",
     currency: process.env.GOOGLE_FLIGHTS_CURRENCY ?? "USD",
-    language_code: process.env.GOOGLE_FLIGHTS_LANGUAGE_CODE ?? "en",
-    country_code: process.env.GOOGLE_FLIGHTS_COUNTRY_CODE ?? "US",
-    flight_number: parsedAirlineCode && parsedFlightNumber ? `${parsedAirlineCode}${parsedFlightNumber}` : null
+    languageCode: process.env.GOOGLE_FLIGHTS_LANGUAGE_CODE ?? "en",
+    countryCode: process.env.GOOGLE_FLIGHTS_COUNTRY_CODE ?? "US",
+    flightNumber: parsedAirlineCode && parsedFlightNumber ? `${parsedAirlineCode}${parsedFlightNumber}` : null
   };
 
   if (!canQueryGoogleFlights) {

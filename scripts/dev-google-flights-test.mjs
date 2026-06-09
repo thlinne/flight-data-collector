@@ -56,14 +56,14 @@ const host = process.env.GOOGLE_FLIGHTS_RAPIDAPI_HOST ?? "google-flights4.p.rapi
 const endpoint = process.env.GOOGLE_FLIGHTS_SEARCH_ONE_WAY_ENDPOINT ?? "/flights/search-one-way";
 const url = new URL(`https://${host}${endpoint}`);
 const params = {
-  departure_id: from,
-  arrival_id: to,
-  outbound_date: date,
+  departureId: from,
+  arrivalId: to,
+  departureDate: date,
   adults: "1",
   currency: process.env.GOOGLE_FLIGHTS_CURRENCY ?? "USD",
-  language_code: process.env.GOOGLE_FLIGHTS_LANGUAGE_CODE ?? "en",
-  country_code: process.env.GOOGLE_FLIGHTS_COUNTRY_CODE ?? "US",
-  flight_number: args.flight ?? null
+  languageCode: process.env.GOOGLE_FLIGHTS_LANGUAGE_CODE ?? "en",
+  countryCode: process.env.GOOGLE_FLIGHTS_COUNTRY_CODE ?? "US",
+  flightNumber: args.flight ?? null
 };
 
 for (const [key, value] of Object.entries(params)) {
