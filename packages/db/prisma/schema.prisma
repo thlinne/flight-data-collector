@@ -268,6 +268,11 @@ model ProviderFetchRun {
   collectionArea     CollectionArea?      @relation(fields: [collectionAreaId], references: [id])
   rawResponse        RawProviderResponse?
   rawObservations    RawFlightObservation[]
+
+  @@index([providerId, countryId, startedAt], map: "idx_pfr_provider_country_started")
+  @@index([success, startedAt], map: "idx_pfr_success_started")
+  @@index([reviewedAt, startedAt], map: "idx_pfr_reviewed_started")
+  @@index([countryId, startedAt], map: "idx_pfr_country_started")
 }
 
 model RawProviderResponse {
@@ -283,6 +288,9 @@ model RawProviderResponse {
   provider        Provider               @relation(fields: [providerId], references: [id])
   fetchRun        ProviderFetchRun       @relation(fields: [fetchRunId], references: [id])
   observations    RawFlightObservation[]
+
+  @@index([providerId, receivedAt], map: "idx_rpr_provider_received")
+  @@index([flightProcessedAt], map: "idx_rpr_flight_processed")
 }
 
 model RawFlightObservation {
@@ -321,10 +329,17 @@ model RawFlightObservation {
   flightObservationLinks FlightObservationLink[]
   countryTags            CountryObservationTag[]
 
+  @@index([observedAt], map: "idx_rfo_observed")
   @@index([providerId, observedAt])
+  @@index([fetchRunId], map: "idx_rfo_fetch_run")
+  @@index([providerId, fetchRunId], map: "idx_rfo_provider_fetch_run")
+  @@index([rawResponseId], map: "idx_rfo_raw_response")
   @@index([icao24])
   @@index([callsign])
   @@index([detectedFlightId])
+  @@index([providerId, detectedFlightId], map: "idx_rfo_provider_detected_flight")
+  @@index([providerId, icao24, observedAt], map: "idx_rfo_provider_icao24_observed")
+  @@index([providerId, callsign, observedAt], map: "idx_rfo_provider_callsign_observed")
 }
 
 model ProviderDetectedFlight {
@@ -386,8 +401,12 @@ model FlightEnrichmentQuery {
   candidates                 GoogleFlightsItineraryCandidate[]
 
   @@index([detectedFlightId, source])
-  @@index([source, status])
+  @@index([source, status, reportDate], map: "idx_feq_source_status_report_date")
   @@index([reportDate])
+  @@index([parsedAirlineCode, parsedFlightNumber], map: "idx_feq_airline_flight")
+  @@index([originAirportCode, destinationAirportCode, outboundDate], map: "idx_feq_route_outbound")
+  @@index([requestedAt], map: "idx_feq_requested")
+  @@index([completedAt], map: "idx_feq_completed")
 }
 
 model GoogleFlightsItineraryCandidate {
@@ -430,6 +449,9 @@ model ProviderDetectedFlightCountry {
   country           Country                @relation(fields: [countryId], references: [id])
 
   @@unique([detectedFlightId, countryId])
+  @@index([detectedFlightId, countryId], map: "idx_pdfc_flight_country")
+  @@index([firstObservedAt], map: "idx_pdfc_first_observed")
+  @@index([lastObservedAt], map: "idx_pdfc_last_observed")
   @@index([countryId, firstObservedAt])
   @@index([countryId, lastObservedAt])
 }
@@ -657,6 +679,9 @@ model FlightObservationLink {
   matchReason           String
   normalizedFlight      NormalizedFlight     @relation(fields: [normalizedFlightId], references: [id])
   rawFlightObservation  RawFlightObservation @relation(fields: [rawFlightObservationId], references: [id])
+
+  @@index([normalizedFlightId], map: "idx_fol_normalized_flight")
+  @@index([rawFlightObservationId], map: "idx_fol_raw_observation")
 }
 
 model CountryObservationTag {
@@ -670,6 +695,11 @@ model CountryObservationTag {
   rawFlightObservation    RawFlightObservation @relation(fields: [rawFlightObservationId], references: [id])
   country                 Country              @relation(fields: [countryId], references: [id])
   collectionArea          CollectionArea       @relation(fields: [collectionAreaId], references: [id])
+
+  @@index([countryId], map: "idx_cot_country")
+  @@index([countryId, rawFlightObservationId], map: "idx_cot_country_observation")
+  @@index([rawFlightObservationId, countryId], map: "idx_cot_observation_country")
+  @@index([collectionAreaId], map: "idx_cot_collection_area")
 }
 
 model ProviderDailyMetric {
@@ -694,6 +724,9 @@ model ProviderDailyMetric {
   country               Country  @relation(fields: [countryId], references: [id])
 
   @@unique([providerId, countryId, date])
+  @@index([date], map: "idx_pdm_date")
+  @@index([providerId, date], map: "idx_pdm_provider_date")
+  @@index([countryId, date], map: "idx_pdm_country_date")
 }
 
 model CountryDailyMetric {
@@ -712,6 +745,7 @@ model CountryDailyMetric {
   country               Country  @relation(fields: [countryId], references: [id])
 
   @@unique([countryId, date])
+  @@index([date], map: "idx_cdm_date")
 }
 
 model AlertRule {
