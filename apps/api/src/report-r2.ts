@@ -133,13 +133,11 @@ function extractArrayPayload(payload: unknown): unknown[] {
   const data = object.data;
   if (data && typeof data === "object") {
     const dataObject = data as Record<string, unknown>;
-    for (const key of ["topFlights", "otherFlights", "flights", "results"]) {
-      if (Array.isArray(dataObject[key])) return dataObject[key] as unknown[];
-    }
+    const combined = ["topFlights", "otherFlights", "flights", "results"].flatMap((key) => Array.isArray(dataObject[key]) ? dataObject[key] as unknown[] : []);
+    if (combined.length > 0) return combined;
   }
-  for (const key of ["topFlights", "otherFlights", "flights", "results"]) {
-    if (Array.isArray(object[key])) return object[key] as unknown[];
-  }
+  const combined = ["topFlights", "otherFlights", "flights", "results"].flatMap((key) => Array.isArray(object[key]) ? object[key] as unknown[] : []);
+  if (combined.length > 0) return combined;
   return [];
 }
 
@@ -178,11 +176,15 @@ function collectFlightNumbers(candidate: unknown): string[] {
   return [...result];
 }
 
+function candidateMatchesFlight(candidate: unknown, airlineCode: string, flightNumber: string): boolean {
+  const expected = `${airlineCode}${flightNumber}`.toUpperCase();
+  return collectFlightNumbers(candidate).some((number) => number === expected);
+}
+
 function pickSelectedCandidate(candidates: unknown[], airlineCode: string | null, flightNumber: string | null): unknown | null {
   if (candidates.length === 0) return null;
   if (!airlineCode || !flightNumber) return candidates[0];
-  const expected = `${airlineCode}${flightNumber}`.toUpperCase();
-  return candidates.find((candidate) => collectFlightNumbers(candidate).some((number) => number === expected)) ?? candidates[0];
+  return candidates.find((candidate) => candidateMatchesFlight(candidate, airlineCode, flightNumber)) ?? null;
 }
 
 function candidateSummary(candidate: unknown, rank: number): {
@@ -375,7 +377,7 @@ async function enrichWithGoogleFlights(input: EnrichmentInput): Promise<R2Enrich
     const rawResponse = bodyText.trim() ? JSON.parse(bodyText) as unknown : { emptyBody: true };
     const candidates = extractArrayPayload(rawResponse);
     const selected = pickSelectedCandidate(candidates, parsedAirlineCode, parsedFlightNumber);
-    const status = response.ok ? (candidates.length > 0 ? "SUCCESS" : "NO_MATCH") : "FAILED";
+    const status = response.ok ? (selected != null ? "SUCCESS" : "NO_MATCH") : "FAILED";
     const created = await prisma.flightEnrichmentQuery.create({
       data: {
         detectedFlightId: input.detectedFlightId,

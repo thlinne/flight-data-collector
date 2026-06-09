@@ -62,6 +62,13 @@ Observed request parameter names for `GET /flights/search-one-way`:
 
 Important implementation note: the endpoint rejected snake_case parameters such as `departure_id`, `arrival_id`, and `outbound_date` with validation errors. Use camelCase request parameters.
 
+Candidate matching decision for R2:
+
+- Treat `topFlights` and `otherFlights` as one candidate list.
+- A Google Flights candidate is selected only if one of its segments contains the expected `airlineCode` and `flightNumber`.
+- If the endpoint returns alternatives but none contains the expected flight segment, store the enrichment result as `NO_MATCH`.
+- Do not use the first returned itinerary as a fallback match, because Google Flights returns broad route alternatives even when `flightNumber` is supplied.
+
 Date grid:
 
 - `GET /date-grid/for-roundtrip`
