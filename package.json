@@ -1,6 +1,6 @@
 {
   "name": "flight-data-collector",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "private": true,
   "packageManager": "pnpm@9.15.0",
   "scripts": {
@@ -14,6 +14,7 @@
     "db:migrate": "prisma migrate dev --schema packages/db/prisma/schema.prisma --name init",
     "db:seed": "tsx packages/db/prisma/seed.ts",
     "debug:provider": "tsx apps/collector/src/debug-provider.ts",
+    "debug:google-flights": "node scripts/dev-google-flights-test.mjs",
     "smoke": "pnpm --filter @flight-data-collector/dashboard smoke"
   },
   "devDependencies": {

@@ -9,7 +9,6 @@ const links = [
   ["/providers", "Providers", Plane],
   ["/control", "Collection Control", Settings],
   ["/raw", "Raw Data Explorer", Database],
-  ["/reports", "Reports", FileText],
   ["/reference-data", "Reference Data", BookOpen],
   ["/analytics", "Analytics", Table2],
   ["/alerts", "System Alerts", Bell],
@@ -29,7 +28,21 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <span className="build-badge">ver {appVersion}</span>
             </div>
             <nav className="nav">
-              {links.map(([href, label, Icon]) => (
+              {links.slice(0, 5).map(([href, label, Icon]) => (
+                <a key={href} href={href} title={label}>
+                  <Icon size={16} /> {label}
+                </a>
+              ))}
+              <div className="nav-group">
+                <a href="/reports" title="Reports">
+                  <FileText size={16} /> Reports
+                </a>
+                <div className="nav-flyout">
+                  <a href="/reports#r1">R1 Daily Overview</a>
+                  <a href="/reports#r2">R2 Daily Detail</a>
+                </div>
+              </div>
+              {links.slice(5).map(([href, label, Icon]) => (
                 <a key={href} href={href} title={label}>
                   <Icon size={16} /> {label}
                 </a>

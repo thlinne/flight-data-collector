@@ -88,6 +88,40 @@ a {
   background: #243142;
 }
 
+.nav-group {
+  position: relative;
+}
+
+.nav-group > a {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+.nav-flyout {
+  background: #243142;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  display: none;
+  left: calc(100% + 8px);
+  min-width: 190px;
+  padding: 6px;
+  position: absolute;
+  top: 0;
+  z-index: 10;
+}
+
+.nav-group:hover .nav-flyout,
+.nav-group:focus-within .nav-flyout {
+  display: grid;
+}
+
+.nav-flyout a {
+  color: #d9e3ef;
+  font-size: 13px;
+  padding: 9px 10px;
+}
+
 .main {
   padding: 24px;
 }

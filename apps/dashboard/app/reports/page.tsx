@@ -87,7 +87,7 @@ export default async function ReportsPage({ searchParams }: { searchParams?: { d
   return (
     <>
       <h1 className="page-title">Reports</h1>
-      <section className="card">
+      <section id="r1" className="card">
         <h2>R1 - One Day Overview, All Countries</h2>
         <form className="toolbar" action="/reports" method="get">
           <label>
@@ -204,7 +204,7 @@ export default async function ReportsPage({ searchParams }: { searchParams?: { d
         <section className="card">Select a provider and date to run R1.</section>
       )}
 
-      <section className="card report-chart-card">
+      <section id="r2" className="card report-chart-card">
         <h2>R2 - One Day Detail, One Country</h2>
         <form className="toolbar" action="/reports" method="get">
           <input type="hidden" name="runR2" value="1" />
