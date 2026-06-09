@@ -206,13 +206,13 @@ export function buildR1Pdf(report: R1Report): Buffer {
   const pages = [drawMatrixPage(report), drawChartPage(report), drawAppendixPage(report)];
   const objects: string[] = [];
   objects.push("<< /Type /Catalog /Pages 2 0 R >>");
-  objects.push(`<< /Type /Pages /Kids ${pages.map((_, index) => `${4 + index * 2} 0 R`).join(" ")} /Count ${pages.length} >>`);
+  objects.push(`<< /Type /Pages /Kids [${pages.map((_, index) => `${4 + index * 2} 0 R`).join(" ")}] /Count ${pages.length} >>`);
   objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
   pages.forEach((content, index) => {
     const pageObjectId = 4 + index * 2;
     const contentObjectId = pageObjectId + 1;
     objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 3 0 R >> >> /Contents ${contentObjectId} 0 R >>`);
-    objects.push(`<< /Length ${Buffer.byteLength(content, "utf8")} >>\nstream\n${content}endstream`);
+    objects.push(`<< /Length ${Buffer.byteLength(content, "utf8")} >>\nstream\n${content}\nendstream`);
   });
 
   let pdf = "%PDF-1.4\n";
