@@ -4,6 +4,7 @@ import { Queue } from "bullmq";
 import Fastify from "fastify";
 import { z } from "zod";
 import { prisma } from "@flight-data-collector/db";
+import { buildR1Pdf, buildR1Report, buildR1Xlsx, sendReportFile } from "./report-r1.js";
 
 const app = Fastify({ logger: true });
 const redisUrl = new URL(process.env.REDIS_URL ?? "redis://localhost:6379");
@@ -158,6 +159,23 @@ app.get("/overview", async () => {
   );
 
   return { today, thisWeek, thisMonth, activeCountries, activeProviders, failedLast24h, openCritical, countries, matrixRows };
+});
+
+app.get("/reports/r1", async (request) => buildR1Report(request.query));
+
+app.get("/reports/r1.pdf", async (request, reply) => {
+  const report = await buildR1Report(request.query);
+  return sendReportFile(reply, buildR1Pdf(report), "application/pdf", `r1-one-day-overview-${report.provider.code}-${report.date}.pdf`);
+});
+
+app.get("/reports/r1.xlsx", async (request, reply) => {
+  const report = await buildR1Report(request.query);
+  return sendReportFile(
+    reply,
+    buildR1Xlsx(report),
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    `r1-one-day-overview-${report.provider.code}-${report.date}.xlsx`
+  );
 });
 
 app.get("/countries", async () => prisma.country.findMany({ include: { collectionAreas: true }, orderBy: { name: "asc" } }));
