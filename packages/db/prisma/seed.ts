@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { Prisma, PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 
 function loadEnvFile(): void {
   const candidates = [resolve(process.cwd(), ".env"), resolve(process.cwd(), "../..", ".env")];
@@ -49,6 +49,8 @@ const providers = [
 const activeProviderCodes = providers.map((provider) => provider.code);
 const appEnvironment = (process.env.APP_ENVIRONMENT ?? process.env.NEXT_PUBLIC_APP_ENVIRONMENT ?? "DEV").toUpperCase();
 const defaultLivePollingIntervalSeconds = appEnvironment === "PROD" ? 600 : 60;
+const defaultRequestsPerHour = Math.ceil(3600 / defaultLivePollingIntervalSeconds);
+const defaultRequestsPerDay = defaultRequestsPerHour * 24;
 
 const adsbExchangeCoverageAreas = [
   { iso3: "BDI", name: "BDI mixed 01 100 NM", latitude: -3.4833, longitude: 29.9185, radiusNm: 100, priority: "CRITICAL" as const },
@@ -236,8 +238,8 @@ async function main(): Promise<void> {
           livePollingIntervalSeconds: defaultLivePollingIntervalSeconds,
           minPollingIntervalSeconds: 30,
           maxRequestsPerMinute: 1,
-          maxRequestsPerHour: provider.code === "RAPID_SKYLINK" ? 4 : 60,
-          maxRequestsPerDay: null,
+          maxRequestsPerHour: defaultRequestsPerHour,
+          maxRequestsPerDay: defaultRequestsPerDay,
           maxCreditsPerDay: null,
           priority: country.priority,
           lowVolumeThresholdCount: 1,
@@ -251,12 +253,17 @@ async function main(): Promise<void> {
 
   await prisma.providerCountryConfig.updateMany({
     where: { maxRequestsPerHour: 1000 },
-    data: { maxRequestsPerHour: 60 }
+    data: { maxRequestsPerHour: defaultRequestsPerHour }
   });
 
   await prisma.providerCountryConfig.updateMany({
     where: { providerId: { in: activeProviderIds } },
-    data: { livePollingIntervalSeconds: defaultLivePollingIntervalSeconds }
+    data: {
+      livePollingIntervalSeconds: defaultLivePollingIntervalSeconds,
+      maxRequestsPerMinute: 1,
+      maxRequestsPerHour: defaultRequestsPerHour,
+      maxRequestsPerDay: defaultRequestsPerDay
+    }
   });
 
   const planeFinder = await prisma.provider.findUnique({ where: { code: "PLANE_FINDER" } });
@@ -266,9 +273,9 @@ async function main(): Promise<void> {
       data: {
         livePollingIntervalSeconds: defaultLivePollingIntervalSeconds,
         maxRequestsPerMinute: 1,
-        maxRequestsPerHour: 6,
-        maxRequestsPerDay: 144,
-        maxCreditsPerDay: 1440,
+        maxRequestsPerHour: defaultRequestsPerHour,
+        maxRequestsPerDay: defaultRequestsPerDay,
+        maxCreditsPerDay: defaultRequestsPerDay * 10,
         notes: `Plane Finder Growth default: standard live BBOX endpoint, 10 credits per request, ${defaultLivePollingIntervalSeconds} second polling for ${appEnvironment}. Enable per country/provider only after API key is configured.`
       }
     });
@@ -303,8 +310,8 @@ async function main(): Promise<void> {
           liveLongitude: null,
           liveRadiusNm: null,
           maxRequestsPerMinute: null,
-          maxRequestsPerHour: requestCount * 6,
-          maxRequestsPerDay: requestCount * 6 * 24,
+          maxRequestsPerHour: requestCount * defaultRequestsPerHour,
+          maxRequestsPerDay: requestCount * defaultRequestsPerDay,
           notes: `ADSBexchange mixed balanced BBOX coverage plan: ${requestCount} radius requests every ${defaultLivePollingIntervalSeconds} seconds for ${appEnvironment}. DEV test first; PROD after approval.`
         }
       });
@@ -343,20 +350,6 @@ async function main(): Promise<void> {
         }
       });
     }
-  }
-
-  await prisma.providerCountryConfig.updateMany({
-    where: { providerId: { in: activeProviderIds } },
-    data: { livePollingIntervalSeconds: defaultLivePollingIntervalSeconds }
-  });
-
-  if (activeProviderIds.length > 0) {
-    await prisma.$executeRaw`
-      UPDATE "ProviderCountryConfig"
-      SET "livePollingIntervalSeconds" = ${defaultLivePollingIntervalSeconds},
-          "updatedAt" = CURRENT_TIMESTAMP
-      WHERE "providerId" IN (${Prisma.join(activeProviderIds)})
-    `;
   }
 
   await prisma.alertRule.upsert({

@@ -7,6 +7,12 @@ function valueAsString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function valueAsIdentifier(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return null;
+}
+
 function valueAsNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim() !== "") {
@@ -63,7 +69,7 @@ function mapArrayRecord(record: UnknownRecord): ProviderNormalizedRecord | null 
   return {
     observedAt: timestamp ? new Date(timestamp * 1000) : new Date(),
     providerAircraftId: valueAsString(values[0]),
-    providerFlightId: valueAsString(record.flightId),
+    providerFlightId: valueAsIdentifier(record.flightId),
     icao24: valueAsString(values[0]),
     callsign: valueAsString(values[16]) ?? valueAsString(values[13]),
     registration: valueAsString(values[9]),
@@ -81,7 +87,7 @@ function mapArrayRecord(record: UnknownRecord): ProviderNormalizedRecord | null 
     verticalRateFpm: valueAsNumber(values[15]),
     squawk: valueAsString(values[6]),
     onGround: valueAsBoolean(values[14]),
-    sourceType: "rapid-flight-radar",
+    sourceType: valueAsString(pick(record, ["source", "dataSource", "sourceType"])) ?? "rapid-flight-radar",
     rawRecord: record
   };
 }
@@ -106,8 +112,8 @@ function mapObjectRecord(input: unknown): ProviderNormalizedRecord | null {
 
   return {
     observedAt: Number.isNaN(observedAt.getTime()) ? new Date() : observedAt,
-    providerAircraftId: valueAsString(pick(record, ["aircraftId", "aircraft_id", "id", "hex", "flightid"])),
-    providerFlightId: valueAsString(pick(record, ["flightId", "flight_id", "flightid", "fr24_id", "id"])),
+    providerAircraftId: valueAsIdentifier(pick(record, ["aircraftId", "aircraft_id", "aircraft_id_hex", "hex"])),
+    providerFlightId: valueAsIdentifier(pick(record, ["flightId", "flight_id", "flightid", "fr24_id", "id"])),
     icao24: valueAsString(pick(record, ["icao24", "hex", "modeS", "mode_s"])),
     callsign: valueAsString(pick(record, ["callsign", "flight", "ident"])),
     registration: valueAsString(pick(record, ["registration", "reg"])),
@@ -125,7 +131,7 @@ function mapObjectRecord(input: unknown): ProviderNormalizedRecord | null {
     verticalRateFpm: valueAsNumber(pick(record, ["verticalRateFpm", "verticalSpeed", "vspeed"])),
     squawk: valueAsString(pick(record, ["squawk"])),
     onGround: valueAsBoolean(pick(record, ["onGround", "ground"])),
-    sourceType: "rapid-flight-radar",
+    sourceType: valueAsString(pick(record, ["source", "dataSource", "sourceType"])) ?? "rapid-flight-radar",
     rawRecord: record
   };
 }
