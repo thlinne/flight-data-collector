@@ -23,6 +23,8 @@ type R2Report = {
     observationCount: number;
     observedOriginAirportCode: string | null;
     observedDestinationAirportCode: string | null;
+    observedAirlineIata: string | null;
+    observedAirlineIcao: string | null;
     enrichment: {
       status: string;
       matchedNumber: string | null;
@@ -41,6 +43,13 @@ type R2Report = {
 
 function todayUtc(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+function providerRoute(originCode: string | null, destinationCode: string | null): string {
+  const origin = originCode?.trim().toUpperCase() || "?";
+  const destination = destinationCode?.trim().toUpperCase() || "?";
+  if (origin === "?" && destination === "?") return "-";
+  return `${origin} -> ${destination}`;
 }
 
 export default async function R2Page({ searchParams }: { searchParams?: { date?: string; providerId?: string; countryId?: string; run?: string; enrich?: string } }) {
@@ -153,6 +162,9 @@ export default async function R2Page({ searchParams }: { searchParams?: { date?:
               <article key={flight.id} className="report-flight-detail">
                 <h3>{index + 1}. {flight.callsign ?? "Unknown callsign"}</h3>
                 <p>ICAO24 {flight.icao24 ?? "-"} | Aircraft {flight.aircraftTypeIcao ?? "-"} | Observed {flight.firstObservedAt} to {flight.lastObservedAt}</p>
+                <p>
+                  Provider data: Flight ID {flight.providerFlightId ?? "-"} | Registration {flight.registration ?? "-"} | Operator {flight.operatorName ?? "-"} | Route {providerRoute(flight.observedOriginAirportCode, flight.observedDestinationAirportCode)} | Airline {flight.observedAirlineIcao ?? flight.observedAirlineIata ?? "-"}
+                </p>
                 <p>
                   ADB enrichment: {flight.enrichment?.status ?? "NOT_REQUESTED"}
                   {flight.enrichment?.reusedFromCache ? " (cached)" : ""}

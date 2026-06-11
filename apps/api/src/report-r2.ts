@@ -217,6 +217,7 @@ export async function buildR2Report(query: unknown): Promise<R2Report> {
       "Every ADB lookup is cached by identity and date in AdbFlightLookup and reused across reports to reduce API spend; historical days are never re-fetched.",
       "ADB live lookups per report are capped by AERODATABOX_MAX_REQUESTS_PER_REPORT; cache hits do not count against the cap.",
       "ADB schedule data is enrichment context only and never overrides observed position evidence; observed flights without an ADB match remain valid.",
+      "Provider-native flight metadata, including FlightAware AeroAPI route fields when supplied, is shown separately from ADB enrichment and never mixed into another provider's data.",
       "Provider data remains separated; no cross-provider deduplication is performed in this report."
     ]
   };
@@ -227,6 +228,13 @@ function enrichmentRoute(enrichment: AdbEnrichment | null): string {
   const origin = enrichment.origin?.iata ?? enrichment.origin?.icao ?? "?";
   const destination = enrichment.destination?.iata ?? enrichment.destination?.icao ?? "?";
   if (!enrichment.origin && !enrichment.destination) return enrichment.status;
+  return `${origin} -> ${destination}`;
+}
+
+function providerRoute(flight: Pick<R2Flight, "observedOriginAirportCode" | "observedDestinationAirportCode">): string {
+  const origin = normalizeCode(flight.observedOriginAirportCode) ?? "?";
+  const destination = normalizeCode(flight.observedDestinationAirportCode) ?? "?";
+  if (origin === "?" && destination === "?") return "-";
   return `${origin} -> ${destination}`;
 }
 
@@ -308,6 +316,8 @@ export function buildR2Pdf(report: R2Report): Buffer {
     lines.push("");
     lines.push(`${index + 1}. ${flight.callsign ?? "Unknown callsign"} | ICAO24 ${flight.icao24 ?? "-"} | Aircraft ${flight.aircraftTypeIcao ?? "-"}`);
     lines.push(`Observed: ${flight.firstObservedAt} to ${flight.lastObservedAt} | points ${flight.observationCount}`);
+    lines.push(`Provider flight id: ${flight.providerFlightId ?? "-"} | registration ${flight.registration ?? "-"} | operator ${flight.operatorName ?? "-"}`);
+    lines.push(`Provider route: ${providerRoute(flight)} | provider airline ${flight.observedAirlineIcao ?? flight.observedAirlineIata ?? "-"}`);
     lines.push(`ADB enrichment: ${enrichment?.status ?? "NOT_REQUESTED"} | flight ${enrichment?.matchedNumber ?? "-"} | route ${enrichmentRoute(enrichment)}`);
     if (enrichment?.airline?.name || enrichment?.aircraftModel) {
       lines.push(`Airline ${enrichment?.airline?.name ?? "-"} | Aircraft ${enrichment?.aircraftModel ?? "-"} | status ${enrichment?.flightStatus ?? "-"}`);
@@ -410,6 +420,11 @@ export function buildR2Xlsx(report: R2Report): Buffer {
       "Callsign",
       "ICAO24",
       "Aircraft type",
+      "Provider flight ID",
+      "Registration",
+      "Operator",
+      "Provider route",
+      "Provider airline",
       "ADB status",
       "ADB flight",
       "ADB route",
@@ -429,6 +444,11 @@ export function buildR2Xlsx(report: R2Report): Buffer {
       flight.callsign ?? "",
       flight.icao24 ?? "",
       flight.aircraftTypeIcao ?? "",
+      flight.providerFlightId ?? "",
+      flight.registration ?? "",
+      flight.operatorName ?? "",
+      providerRoute(flight),
+      flight.observedAirlineIcao ?? flight.observedAirlineIata ?? "",
       enrichment?.status ?? "NOT_REQUESTED",
       enrichment?.matchedNumber ?? "",
       enrichment && (enrichment.origin || enrichment.destination) ? enrichmentRoute(enrichment) : "",
