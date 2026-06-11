@@ -49,7 +49,22 @@ const providers = [
 ];
 const activeProviderCodes = providers.map((provider) => provider.code);
 const appEnvironment = (process.env.APP_ENVIRONMENT ?? process.env.NEXT_PUBLIC_APP_ENVIRONMENT ?? "DEV").toUpperCase();
-const defaultLivePollingIntervalSeconds = appEnvironment === "PROD" ? 600 : 60;
+
+function positiveIntegerFromEnv(key: string): number | null {
+  const rawValue = process.env[key];
+  if (!rawValue) return null;
+  const value = Number(rawValue);
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`${key} must be a positive integer if set.`);
+  }
+  return value;
+}
+
+const defaultLivePollingIntervalSeconds =
+  positiveIntegerFromEnv("DEFAULT_LIVE_POLLING_INTERVAL_SECONDS") ??
+  (appEnvironment === "PROD"
+    ? positiveIntegerFromEnv("PROD_LIVE_POLLING_INTERVAL_SECONDS") ?? 600
+    : positiveIntegerFromEnv("DEV_LIVE_POLLING_INTERVAL_SECONDS") ?? 60);
 const defaultRequestsPerHour = Math.ceil(3600 / defaultLivePollingIntervalSeconds);
 const defaultRequestsPerDay = defaultRequestsPerHour * 24;
 
