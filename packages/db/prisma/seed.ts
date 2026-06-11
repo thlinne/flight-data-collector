@@ -42,6 +42,7 @@ const countries = [
 
 const providers = [
   { code: "PLANE_FINDER", name: "Plane Finder API", integrationStatus: "TESTING" as const, supportsLive: true, supportsHistorical: true, baseUrl: "https://api.planefinder.net/api" },
+  { code: "FLIGHTAWARE_AERO", name: "FlightAware AeroAPI", integrationStatus: "TESTING" as const, supportsLive: true, supportsHistorical: false, baseUrl: "https://aeroapi.flightaware.com/aeroapi" },
   { code: "RAPID_FLIGHT_RADAR", name: "RapidAPI Flight Radar", integrationStatus: "WORKING" as const, supportsLive: true, supportsHistorical: false, baseUrl: "https://flight-radar1.p.rapidapi.com" },
   { code: "RAPID_ADSBEXCHANGE", name: "RapidAPI ADSBexchange", integrationStatus: "WORKING" as const, supportsLive: true, supportsHistorical: false, baseUrl: "https://adsbexchange-com1.p.rapidapi.com" },
   { code: "RAPID_SKYLINK", name: "RapidAPI SkyLink", integrationStatus: "TESTING" as const, supportsLive: true, supportsHistorical: false, baseUrl: "https://skylink-api.p.rapidapi.com" }

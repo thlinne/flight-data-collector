@@ -110,6 +110,7 @@ enum DetectedFlightGroupingMethod {
 
 enum FlightEnrichmentSource {
   GOOGLE_FLIGHTS_RAPIDAPI
+  AERODATABOX
 }
 
 enum FlightEnrichmentStatus {
@@ -118,6 +119,13 @@ enum FlightEnrichmentStatus {
   NO_QUERY_POSSIBLE
   NO_MATCH
   FAILED
+}
+
+enum AdbQueryKind {
+  CALLSIGN
+  NUMBER
+  REGISTRATION
+  ICAO24
 }
 
 model Provider {
@@ -436,6 +444,55 @@ model GoogleFlightsItineraryCandidate {
 
   @@index([enrichmentQueryId, rank])
   @@index([departureAirportCode, arrivalAirportCode])
+}
+
+// AeroDataBox flight-route/schedule lookups. Cached by (queryKind:queryValue:queryDate)
+// and reused across detected flights with the same identity and date. ADB is the R2
+// route/itinerary enrichment source that replaced Google Flights.
+model AdbFlightLookup {
+  id                    String                 @id @default(cuid())
+  lookupKey             String                 @unique
+  queryKind             AdbQueryKind
+  queryValue            String
+  queryDate             String
+  status                FlightEnrichmentStatus @default(PENDING)
+  source                FlightEnrichmentSource @default(AERODATABOX)
+  firstDetectedFlightId String?
+  endpoint              String?
+  httpStatus            Int?
+  requestedAt           DateTime?
+  completedAt           DateTime?
+  errorMessage          String?
+  candidateCount        Int                    @default(0)
+  matchedNumber         String?
+  airlineName           String?
+  airlineIata           String?
+  airlineIcao           String?
+  departureIcao         String?
+  departureIata         String?
+  departureName         String?
+  departureCountry      String?
+  departureScheduledUtc DateTime?
+  arrivalIcao           String?
+  arrivalIata           String?
+  arrivalName           String?
+  arrivalCountry        String?
+  arrivalScheduledUtc   DateTime?
+  arrivalPredictedUtc   DateTime?
+  aircraftModel         String?
+  flightStatus          String?
+  codeshareStatus       String?
+  isCargo               Boolean?
+  greatCircleKm         Float?
+  lastUpdatedUtc        DateTime?
+  selectedCandidateJson Json?
+  rawResponseJson       Json?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  @@index([queryKind, queryValue, queryDate], map: "idx_adb_kind_value_date")
+  @@index([status, queryDate], map: "idx_adb_status_date")
+  @@index([departureIata, arrivalIata], map: "idx_adb_route")
 }
 
 model ProviderDetectedFlightCountry {

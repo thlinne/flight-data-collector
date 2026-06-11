@@ -15,7 +15,7 @@ const redisConnection = {
   maxRetriesPerRequest: null
 };
 const collectionQueue = new Queue("collection", { connection: redisConnection });
-const activeProviderCodes = ["PLANE_FINDER", "RAPID_ADSBEXCHANGE", "RAPID_FLIGHT_RADAR", "RAPID_SKYLINK"];
+const activeProviderCodes = ["PLANE_FINDER", "FLIGHTAWARE_AERO", "RAPID_ADSBEXCHANGE", "RAPID_FLIGHT_RADAR", "RAPID_SKYLINK"];
 const overviewMatrixConcurrency = 2;
 
 async function mapWithConcurrency<T, R>(items: T[], concurrency: number, mapper: (item: T) => Promise<R>): Promise<R[]> {

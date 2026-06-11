@@ -23,7 +23,17 @@ type R2Report = {
     observationCount: number;
     observedOriginAirportCode: string | null;
     observedDestinationAirportCode: string | null;
-    enrichment: { status: string; candidateCount: number; errorMessage: string | null; selectedCandidate: unknown } | null;
+    enrichment: {
+      status: string;
+      matchedNumber: string | null;
+      origin: { iata: string | null; icao: string | null; name: string | null; scheduledUtc: string | null } | null;
+      destination: { iata: string | null; icao: string | null; name: string | null; scheduledUtc: string | null } | null;
+      airline: { name: string | null; iata: string | null; icao: string | null } | null;
+      aircraftModel: string | null;
+      flightStatus: string | null;
+      reusedFromCache: boolean;
+      errorMessage: string | null;
+    } | null;
     observations: Array<{ observedAt: string; latitude: number; longitude: number; altitudeFt: number | null; groundSpeedKt: number | null; headingDeg: number | null }>;
   }>;
   assumptions: string[];
@@ -72,7 +82,7 @@ export default async function R2Page({ searchParams }: { searchParams?: { date?:
             </select>
           </label>
           <label>
-            Google Flights enrichment
+            AeroDataBox enrichment
             <select name="enrich" defaultValue={enrich}>
               <option value="true">Enabled</option>
               <option value="false">Disabled</option>
@@ -143,7 +153,21 @@ export default async function R2Page({ searchParams }: { searchParams?: { date?:
               <article key={flight.id} className="report-flight-detail">
                 <h3>{index + 1}. {flight.callsign ?? "Unknown callsign"}</h3>
                 <p>ICAO24 {flight.icao24 ?? "-"} | Aircraft {flight.aircraftTypeIcao ?? "-"} | Observed {flight.firstObservedAt} to {flight.lastObservedAt}</p>
-                <p>Route fields: {flight.observedOriginAirportCode ?? "-"} to {flight.observedDestinationAirportCode ?? "-"} | Google Flights enrichment: {flight.enrichment?.status ?? "NOT_REQUESTED"} ({flight.enrichment?.candidateCount ?? 0} candidates)</p>
+                <p>
+                  ADB enrichment: {flight.enrichment?.status ?? "NOT_REQUESTED"}
+                  {flight.enrichment?.reusedFromCache ? " (cached)" : ""}
+                  {flight.enrichment?.matchedNumber ? ` | flight ${flight.enrichment.matchedNumber}` : ""}
+                  {flight.enrichment?.origin || flight.enrichment?.destination
+                    ? ` | route ${flight.enrichment?.origin?.iata ?? flight.enrichment?.origin?.icao ?? "?"} -> ${flight.enrichment?.destination?.iata ?? flight.enrichment?.destination?.icao ?? "?"}`
+                    : ""}
+                </p>
+                {flight.enrichment?.airline?.name || flight.enrichment?.aircraftModel ? (
+                  <p>
+                    Airline {flight.enrichment?.airline?.name ?? "-"} | Aircraft {flight.enrichment?.aircraftModel ?? "-"} | Status {flight.enrichment?.flightStatus ?? "-"}
+                    {flight.enrichment?.origin?.scheduledUtc ? ` | dep ${flight.enrichment.origin.scheduledUtc}` : ""}
+                    {flight.enrichment?.destination?.scheduledUtc ? ` | arr ${flight.enrichment.destination.scheduledUtc}` : ""}
+                  </p>
+                ) : null}
                 {flight.enrichment?.errorMessage ? <p className="status-warning">{flight.enrichment.errorMessage}</p> : null}
                 <table className="table">
                   <thead>
